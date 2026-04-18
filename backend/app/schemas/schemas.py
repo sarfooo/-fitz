@@ -214,3 +214,69 @@ class TryOnResponse(BaseModel):
     prompt_used: str | None = None
     credits_remaining: int | None = None
     error: str | None = None
+
+
+class FitGarment(BaseModel):
+    image_url: str
+    name: str | None = None
+
+
+class FitRequest(BaseModel):
+    top: FitGarment
+    bottom: FitGarment
+    fit_preference: FitPreference = "regular"
+    image_size: str = "1024x1536"
+    quality: str = "high"
+
+
+class AvatarIdentity(BaseModel):
+    avatar_id: str
+    identity_description: str
+    image_url: str | None = None  # signed URL to the first reference photo
+
+
+class CurrentAvatarResponse(BaseModel):
+    avatar: AvatarIdentity | None = None
+
+
+class CaptureIdentityResponse(BaseModel):
+    success: bool
+    avatar: AvatarIdentity | None = None
+    error: str | None = None
+
+
+RenderStatus = Literal["pending", "ready", "failed"]
+
+
+class FitStartResponse(BaseModel):
+    render_id: str
+    status: RenderStatus = "pending"
+
+
+class FitStatusResponse(BaseModel):
+    render_id: str
+    status: RenderStatus
+    image: GeneratedImageOut | None = None
+    error: str | None = None
+    credits_remaining: int | None = None
+
+
+class LookbookFit(BaseModel):
+    render_id: str
+    name: str | None = None
+    image_url: str | None = None
+    created_at: str
+
+
+class LookbookResponse(BaseModel):
+    fits: list[LookbookFit]
+
+
+class SaveFitRequest(BaseModel):
+    name: str | None = None
+
+
+class SaveFitResponse(BaseModel):
+    success: bool
+    fit: LookbookFit | None = None
+    error: str | None = None

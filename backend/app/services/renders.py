@@ -76,6 +76,7 @@ def insert_render(
     top_garment_id: str | None,
     bottom_garment_id: str | None,
     prompt: str,
+    status: str = "completed",
 ) -> dict[str, Any]:
     sb = get_supabase()
     res = (
@@ -87,12 +88,31 @@ def insert_render(
                 "top_garment_id": top_garment_id,
                 "bottom_garment_id": bottom_garment_id,
                 "prompt": prompt,
-                "status": "completed",
+                "status": status,
             }
         )
         .execute()
     )
     return res.data[0] if res.data else {}
+
+
+def update_render_status(render_id: str, status: str) -> None:
+    sb = get_supabase()
+    sb.table("try_on_renders").update({"status": status}).eq("id", render_id).execute()
+
+
+def get_render_for_user(render_id: str, user_id: str) -> dict[str, Any] | None:
+    sb = get_supabase()
+    res = (
+        sb.table("try_on_renders")
+        .select("*, render_angles(*)")
+        .eq("id", render_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = res.data or []
+    return rows[0] if rows else None
 
 
 def insert_render_angle(
@@ -131,3 +151,30 @@ def list_renders_for_user(user_id: str, *, limit: int = 50) -> list[dict[str, An
         .execute()
     )
     return res.data or []
+
+
+def list_lookbook(user_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+    sb = get_supabase()
+    res = (
+        sb.table("try_on_renders")
+        .select("*, render_angles(*)")
+        .eq("user_id", user_id)
+        .eq("favorited", True)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return res.data or []
+
+
+def save_to_lookbook(render_id: str, user_id: str, name: str | None) -> dict[str, Any] | None:
+    sb = get_supabase()
+    res = (
+        sb.table("try_on_renders")
+        .update({"favorited": True, "name": name})
+        .eq("id", render_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    rows = res.data or []
+    return rows[0] if rows else None

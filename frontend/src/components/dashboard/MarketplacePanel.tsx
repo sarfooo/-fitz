@@ -12,7 +12,7 @@ export interface MarketplaceItem {
   price: number | null;
   category?: string | null;
   size?: string | null;
-  imageUrl?: string;
+  imageUrl?: string | null;
   productUrl?: string | null;
 }
 
@@ -193,7 +193,18 @@ function ItemCard({
 }) {
   const [saved, setSaved] = useState(false);
   return (
-    <button type="button" onClick={onSelect} className="text-left group">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      className="text-left group cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--color-fc-neon)]"
+    >
       <div
         className={`relative aspect-square bg-white/5 border overflow-hidden rounded-sm ${
           isSelected
@@ -249,6 +260,6 @@ function ItemCard({
           </a>
         ) : null}
       </div>
-    </button>
+    </div>
   );
 }

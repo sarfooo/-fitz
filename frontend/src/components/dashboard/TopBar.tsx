@@ -3,19 +3,21 @@
 import { Minus, Square, X } from "lucide-react";
 import Image from "next/image";
 
+export type TopBarView = "home" | "browse" | "closet" | "lookbook";
+
 interface TopBarProps {
   username: string;
   displayName?: string | null;
-  avatarUrl?: string;
-  active?: "home" | "browse" | "closet" | "lookbook";
-  onNavigate?: (view: NonNullable<TopBarProps["active"]>) => void;
+  avatarUrl?: string | null;
+  active?: TopBarView;
+  onNavigate?: (view: TopBarView) => void;
 }
 
 const NAV_ITEMS: Array<{ id: TopBarProps["active"]; label: string }> = [
   { id: "home", label: "HOME" },
   { id: "browse", label: "BROWSE" },
   { id: "closet", label: "CLOSET" },
-  { id: "lookbook", label: "LOOKBOOK" },
+  { id: "lookbook", label: "OUTFITS" },
 ];
 
 export function TopBar({
@@ -51,7 +53,7 @@ export function TopBar({
             <button
               key={item.id}
               type="button"
-              onClick={() => onNavigate?.(item.id)}
+              onClick={() => item.id && onNavigate?.(item.id)}
               className={`text-sm tracking-[0.25em] font-semibold transition-colors ${
                 isActive
                   ? "neon-pink px-3 py-1 border border-[color:var(--color-fc-hot)] rounded"

@@ -10,11 +10,12 @@ def ensure_wallet(user_id: str):
         sb.table("credit_wallets")
         .select("*")
         .eq("user_id", user_id)
-        .maybe_single()
+        .limit(1)
         .execute()
     )
-    if wallet_response.data:
-        return wallet_response.data
+    rows = wallet_response.data or []
+    if rows:
+        return rows[0]
 
     created = (
         sb.table("credit_wallets")

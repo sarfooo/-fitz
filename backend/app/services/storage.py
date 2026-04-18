@@ -65,3 +65,36 @@ async def upload_render(image: GeneratedImage, *, user_id: str) -> StoredImage:
     return await upload_generated(
         image, bucket=s.supabase_bucket_renders, path_prefix=f"user/{user_id}"
     )
+
+
+async def upload_reference_photo(
+    data: bytes,
+    *,
+    user_id: str,
+    content_type: str = "image/jpeg",
+    ext: str = "jpg",
+) -> StoredImage:
+    """Upload a raw user-supplied photo (not a generated image) to the avatar bucket."""
+    s = get_settings()
+    path = f"user/{user_id}/ref/{uuid.uuid4().hex}.{ext}"
+    sb = get_supabase()
+    sb.storage.from_(s.supabase_bucket_avatars).upload(
+        path=path,
+        file=data,
+        file_options={"content-type": content_type, "upsert": "false"},
+    )
+    signed = sb.storage.from_(s.supabase_bucket_avatars).create_signed_url(
+        path, SIGNED_URL_TTL_SECONDS
+    )
+    return StoredImage(
+        bucket=s.supabase_bucket_avatars,
+        path=path,
+        signed_url=signed["signedURL"],
+    )
+
+
+def signed_url_for(*, bucket: str, path: str) -> str:
+    """Generate a fresh signed URL for an existing storage path."""
+    sb = get_supabase()
+    signed = sb.storage.from_(bucket).create_signed_url(path, SIGNED_URL_TTL_SECONDS)
+    return signed["signedURL"]
