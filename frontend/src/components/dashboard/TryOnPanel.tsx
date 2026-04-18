@@ -12,6 +12,7 @@ interface TryOnPanelProps {
   wornItem?: MarketplaceItem | null;
   onWearItem?: (item: MarketplaceItem | null) => void;
   accessToken?: string | null;
+  onClosetSaved?: () => void;
 }
 
 export function TryOnPanel({
@@ -20,6 +21,7 @@ export function TryOnPanel({
   wornItem,
   onWearItem,
   accessToken,
+  onClosetSaved,
 }: TryOnPanelProps) {
   const hasSelectedItem = Boolean(currentItem);
   const isWearingSelectedItem = Boolean(currentItem && wornItem?.id === currentItem.id);
@@ -87,6 +89,7 @@ export function TryOnPanel({
             isWearingSelectedItem={isWearingSelectedItem}
             hasSelectedItem={hasSelectedItem}
             accessToken={accessToken ?? null}
+            onClosetSaved={onClosetSaved}
             onToggleWear={() => {
               if (!currentItem) {
                 return;
@@ -124,16 +127,19 @@ function ItemCard({
   hasSelectedItem,
   isWearingSelectedItem,
   accessToken,
+  onClosetSaved,
   onToggleWear,
 }: {
   item?: MarketplaceItem | null;
   hasSelectedItem: boolean;
   isWearingSelectedItem: boolean;
   accessToken: string | null;
+  onClosetSaved?: () => void;
   onToggleWear: () => void;
 }) {
   const [isSavingToCloset, setIsSavingToCloset] = useState(false);
   const [closetSavedItemId, setClosetSavedItemId] = useState<string | null>(null);
+  const [closetError, setClosetError] = useState<string | null>(null);
 
   const normalizedSize = item?.size
     ? item.size
@@ -150,7 +156,9 @@ function ItemCard({
 
     try {
       setIsSavingToCloset(true);
+      setClosetError(null);
       if (!accessToken) {
+        setClosetError("Sign in to save items to your closet.");
         return;
       }
 
@@ -165,6 +173,9 @@ function ItemCard({
         product_url: item.productUrl ?? null,
       });
       setClosetSavedItemId(item.id);
+      onClosetSaved?.();
+    } catch (err: unknown) {
+      setClosetError(err instanceof Error ? err.message : "Failed to save item.");
     } finally {
       setIsSavingToCloset(false);
     }
@@ -211,6 +222,9 @@ function ItemCard({
         >
           {isWearingSelectedItem ? "Remove item" : "Wear item"}
         </button>
+        {closetError ? (
+          <p className="text-[10px] text-rose-300">{closetError}</p>
+        ) : null}
       </div>
     </div>
   );

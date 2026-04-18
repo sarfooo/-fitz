@@ -70,7 +70,7 @@ export function MarketplacePanel({
         if (!cancelled) {
           const nextItems = data.items.map(mapBrowseItem);
           setItems(nextItems);
-          if (nextItems.length > 0) {
+          if (nextItems.length > 0 && !selectedItemId) {
             onSelectItem?.(nextItems[0]);
           }
         }
@@ -91,7 +91,7 @@ export function MarketplacePanel({
     return () => {
       cancelled = true;
     };
-  }, [onSelectItem, page, submittedQuery]);
+  }, [onSelectItem, page, selectedItemId, submittedQuery]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

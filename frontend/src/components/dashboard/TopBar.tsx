@@ -8,6 +8,7 @@ interface TopBarProps {
   displayName?: string | null;
   avatarUrl?: string;
   active?: "home" | "browse" | "closet" | "lookbook";
+  onNavigate?: (view: NonNullable<TopBarProps["active"]>) => void;
 }
 
 const NAV_ITEMS: Array<{ id: TopBarProps["active"]; label: string }> = [
@@ -22,6 +23,7 @@ export function TopBar({
   displayName,
   avatarUrl,
   active = "browse",
+  onNavigate,
 }: TopBarProps) {
   const primaryLabel = displayName?.trim() || username;
 
@@ -49,6 +51,7 @@ export function TopBar({
             <button
               key={item.id}
               type="button"
+              onClick={() => onNavigate?.(item.id)}
               className={`text-sm tracking-[0.25em] font-semibold transition-colors ${
                 isActive
                   ? "neon-pink px-3 py-1 border border-[color:var(--color-fc-hot)] rounded"

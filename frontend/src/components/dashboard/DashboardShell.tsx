@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 
 import { ClosetPanel } from "@/components/dashboard/ClosetPanel";
-import { FitDetailsStrip } from "@/components/dashboard/FitDetailsStrip";
 import { MarketplacePanel, type MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
 import { TaskBar } from "@/components/dashboard/TaskBar";
 import { TopBar } from "@/components/dashboard/TopBar";
@@ -19,13 +18,23 @@ interface DashboardShellProps {
 }
 
 export function DashboardShell({ user, accessToken = null }: DashboardShellProps) {
+  const [activeView, setActiveView] = useState<"home" | "browse" | "closet" | "lookbook">("browse");
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
   const [wornItem, setWornItem] = useState<MarketplaceItem | null>(null);
+  const [closetVersion, setClosetVersion] = useState(0);
   const handleSelectItem = useCallback((item: MarketplaceItem) => {
     setSelectedItem(item);
   }, []);
   const handleWearItem = useCallback((item: MarketplaceItem | null) => {
     setWornItem(item);
+  }, []);
+  const handleClosetSaved = useCallback(() => {
+    setClosetVersion((current) => current + 1);
+    setActiveView("closet");
+  }, []);
+  const handleClosetSelectItem = useCallback((item: MarketplaceItem) => {
+    setSelectedItem(item);
+    setActiveView("browse");
   }, []);
 
   return (
@@ -34,21 +43,44 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
         username={user.username}
         displayName={user.displayName}
         avatarUrl={user.avatarUrl ?? null}
-        active="browse"
+        active={activeView}
+        onNavigate={setActiveView}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr_300px] gap-4 p-4 flex-1 min-h-0 overflow-hidden">
-        <MarketplacePanel selectedItemId={selectedItem?.id ?? null} onSelectItem={handleSelectItem} />
-        <TryOnPanel
-          currentItem={selectedItem}
-          wornItem={wornItem}
-          onWearItem={handleWearItem}
-          accessToken={accessToken}
-        />
-        <ClosetPanel accessToken={accessToken} />
-      </div>
+      {activeView === "browse" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 p-4 flex-1 min-h-0 overflow-hidden">
+          <MarketplacePanel selectedItemId={selectedItem?.id ?? null} onSelectItem={handleSelectItem} />
+          <TryOnPanel
+            currentItem={selectedItem}
+            wornItem={wornItem}
+            onWearItem={handleWearItem}
+            accessToken={accessToken}
+            onClosetSaved={handleClosetSaved}
+          />
+        </div>
+      ) : null}
 
-      <FitDetailsStrip />
+      {activeView === "closet" ? (
+        <div className="p-4 flex-1 min-h-0 overflow-hidden">
+          <ClosetPanel
+            accessToken={accessToken}
+            version={closetVersion}
+            onSelectItem={handleClosetSelectItem}
+          />
+        </div>
+      ) : null}
+
+      {activeView === "home" || activeView === "lookbook" ? (
+        <div className="p-4 flex-1 min-h-0 overflow-hidden">
+          <section className="y2k-window h-full flex items-center justify-center px-6 text-center text-white/55">
+            <p style={{ fontFamily: "var(--font-mono)" }}>
+              {activeView === "home"
+                ? "Home view is not wired yet. Browse and Closet are active."
+                : "Lookbook view is not wired yet. Browse and Closet are active."}
+            </p>
+          </section>
+        </div>
+      ) : null}
 
       <TaskBar />
     </main>

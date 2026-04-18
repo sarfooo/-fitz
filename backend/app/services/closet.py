@@ -21,14 +21,16 @@ def create_closet_item(payload: dict):
         .eq("user_id", payload["user_id"])
         .eq("source", payload["source"])
         .eq("listing_id", payload["listing_id"])
-        .maybe_single()
+        .limit(1)
         .execute()
     )
-    if existing.data:
-        return existing.data
+    existing_rows = getattr(existing, "data", None) or []
+    if existing_rows:
+        return existing_rows[0]
 
     response = sb.table("closet_items").insert(payload).execute()
-    return response.data[0] if response.data else None
+    rows = getattr(response, "data", None) or []
+    return rows[0] if rows else None
 
 
 def delete_closet_item(user_id: str, closet_item_id: str):

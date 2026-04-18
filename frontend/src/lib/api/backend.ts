@@ -63,6 +63,11 @@ export interface AddClosetItemResponse {
   item: ClosetItem;
 }
 
+export interface DeleteClosetItemResponse {
+  success: boolean;
+  closet_item_id: string;
+}
+
 function getBackendBaseUrl() {
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -124,4 +129,16 @@ export async function addClosetItem(accessToken: string, payload: AddClosetItemR
   });
 
   return parseJson<AddClosetItemResponse>(response);
+}
+
+export async function deleteClosetItem(accessToken: string, closetItemId: string) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/closet/${closetItemId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  return parseJson<DeleteClosetItemResponse>(response);
 }
