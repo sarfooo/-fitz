@@ -1,6 +1,7 @@
-import backend.scraper.client as client
-import backend.scraper.grailed.helper as helper
 from urllib.parse import quote_plus
+
+import scraper.client as client
+import scraper.helper as helper
 
 class GrailedAPI:
     def __init__(self):
@@ -32,13 +33,13 @@ class GrailedAPI:
             print(f"Error getting algolia keys: {exception}")
             return None
 
-    def query_items(self, query):
+    def query_items(self, query: str, page: int):
         encoded_query = quote_plus(query)
         data = {
             "requests": [
                 {
                     "indexName": "Listing_by_listing_quality_production",
-                    "params": f'analytics=true&clickAnalytics=true&enableABTest=true&facets=["badges","category_path","category_size","color","condition","department","designers.name","location","price_i","strata"]&getRankingInfo=true&highlightPostTag=__/ais-highlight__&highlightPreTag=__ais-highlight__&hitsPerPage=40&maxValuesPerFacet=165&numericFilters=["price_i>=0","price_i<=1000000"]&page=0&query={encoded_query}&userToken=461d92c8-5fbf-46d1-a319-5ac59129ea57'
+                    "params": f'analytics=true&clickAnalytics=true&enableABTest=true&facets=["badges","category_path","category_size","color","condition","department","designers.name","location","price_i","strata"]&getRankingInfo=true&highlightPostTag=__/ais-highlight__&highlightPreTag=__ais-highlight__&hitsPerPage=40&maxValuesPerFacet=165&numericFilters=["price_i>=0","price_i<=1000000"]&page={page}&query={encoded_query}&userToken=461d92c8-5fbf-46d1-a319-5ac59129ea57'
                 },
                 {
                     "indexName": "Listing_by_listing_quality_production",
@@ -53,9 +54,4 @@ class GrailedAPI:
         except Exception as exception:
             print(f"Error querying Grailed: {exception}")
             return None
-
-
-if __name__ == "__main__":
-    api = GrailedAPI()
-    items = api.query_items("y2k shirts")
-    print(items)
+        

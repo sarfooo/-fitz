@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import tryon
+from app.routes import tryon, browse, onboarding
 
 settings = get_settings()
 
@@ -16,7 +16,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(tryon.router)
+# app.include_router(tryon.router)
+app.include_router(browse.router)
+app.include_router(onboarding.router)
 
 
 @app.get("/")
@@ -27,3 +29,7 @@ def root() -> dict:
 @app.get("/health")
 def health() -> dict:
     return {"status": "healthy"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", reload=True)
