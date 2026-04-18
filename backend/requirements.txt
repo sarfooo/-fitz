@@ -1,0 +1,30 @@
+# ---- Web framework ----
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+
+# ---- Request / response handling ----
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+python-multipart>=0.0.12
+python-dotenv>=1.0.1
+
+# ---- HTTP ----
+httpx>=0.27.2
+aiofiles>=24.1.0
+tls-client>=1.0.1
+
+# ---- Typing ----
+typing-extensions>=4.12.0
+
+# ---- AI / Image generation ----
+dedalus-labs>=0.1.0
+Pillow>=11.0.0
+
+# ---- CORS, auth helpers (scaffolding) ----
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# ---- Dev / tests ----
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+ruff>=0.7.0
