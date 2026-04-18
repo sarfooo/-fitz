@@ -1,8 +1,11 @@
 from fastapi import APIRouter, HTTPException
+
 from app.schemas.schemas import ItemsResponse
 from app.services.marketplace import search_items
 
+
 router = APIRouter(prefix="/browse", tags=["browse"])
+
 
 @router.get("", response_model=ItemsResponse)
 def query_items(query: str, page: int = 0):
@@ -13,5 +16,5 @@ def query_items(query: str, page: int = 0):
     return ItemsResponse(
         query = query,
         page = page,
-        items =items
+        items = items
     )

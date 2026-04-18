@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     supabase_bucket_renders: str = "renders"
 
     app_env: str = "dev"
-    cors_origins: str = "http://localhost:3000,http://localhost:5173"
+    cors_origins: str = "http://localhost:3000,http://localhost:3005,http://localhost:5173"
 
     @property
     def cors_origins_list(self) -> list[str]:

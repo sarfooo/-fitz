@@ -1,52 +1,76 @@
-from fastapi import APIRouter
-from app.schemas.schemas import ClosetItem, ClosetResponse, AddClosetItemResponse, DeleteClosetItemResponse
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.deps.auth import get_current_user_id
+from app.schemas.schemas import (
+    AddClosetItemResponse,
+    ClosetItem,
+    ClosetItemCreateRequest,
+    ClosetRender,
+    ClosetRendersResponse,
+    ClosetResponse,
+    DeleteClosetItemResponse,
+)
+from app.services.closet import create_closet_item, delete_closet_item, list_closet_items, list_renders
+
 
 router = APIRouter(prefix="/closet", tags=["closet"])
 
-mock_closet_items = [
-    {
-        "item_name": "Vetements Star Knit Sweater",
-        "price": 280,
-        "size": "L",
-        "image": "https://images.example.com/vetements-star-knit.jpg",
-        "category": "tops",
-        "listing_id": 1
-    },
-    {
-        "item_name": "Jaded London Colossus Jeans",
-        "price": 190,
-        "size": "32",
-        "image": "https://images.example.com/jaded-london-colossus-jeans.jpg",
-        "category": "bottoms",
-        "listing_id": 2
-    }
-]
 
 @router.get("", response_model=ClosetResponse)
-def get_closet_items():
-    return ClosetResponse(items = mock_closet_items)
+def get_closet_items(user_id: str = Depends(get_current_user_id)):
+    rows = list_closet_items(user_id)
+    items = [ClosetItem(**row) for row in rows]
+    return ClosetResponse(items=items)
 
 
 @router.post("", response_model=AddClosetItemResponse)
-def add_closet_item(item: ClosetItem):
-    mock_closet_items.append(item.model_dump())
+def add_closet_item(
+    request: ClosetItemCreateRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    row = create_closet_item(
+        {
+            **request.model_dump(),
+            "user_id": user_id,
+        }
+    )
+    if row is None:
+        raise HTTPException(status_code=500, detail="Failed to save closet item")
     return AddClosetItemResponse(
-        success = True,
-        item = item
+        success=True,
+        item=ClosetItem(**row),
     )
 
 
-@router.delete("/{listing_id}", response_model=DeleteClosetItemResponse)
-def delete_closet_item(listing_id: int):
-    for index, item in enumerate(mock_closet_items):
-        if item["listing_id"] == listing_id:
-            del mock_closet_items[index]
-            return DeleteClosetItemResponse(
-                success = True,
-                listing_id = listing_id
-            )
-
+@router.delete("/{closet_item_id}", response_model=DeleteClosetItemResponse)
+def remove_closet_item(
+    closet_item_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    success = delete_closet_item(user_id, closet_item_id)
     return DeleteClosetItemResponse(
-        success = False,
-        listing_id = listing_id
+        success=success,
+        closet_item_id=closet_item_id,
     )
+
+
+@router.get("/renders", response_model=ClosetRendersResponse)
+def get_closet_renders(user_id: str = Depends(get_current_user_id)):
+    rows = list_renders(user_id)
+    renders = []
+    for row in rows:
+        image = None
+        angles = row.get("render_angles") or []
+        if angles:
+            image = angles[0].get("image_path")
+
+        renders.append(
+            ClosetRender(
+                render_id=row["id"],
+                title="Try-On Render",
+                image=image,
+                created_at=row["created_at"],
+            )
+        )
+
+    return ClosetRendersResponse(renders=renders)

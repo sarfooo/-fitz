@@ -1,0 +1,31 @@
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from app.services.supabase_client import get_supabase
+
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> str:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+
+    try:
+        response = get_supabase().auth.get_user(credentials.credentials)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid auth token") from exc
+
+    user = getattr(response, "user", None)
+    user_id = getattr(user, "id", None) if user is not None else None
+    if user_id is None and isinstance(response, dict):
+        user = response.get("user")
+        if isinstance(user, dict):
+            user_id = user.get("id")
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unable to resolve user")
+
+    return str(user_id)

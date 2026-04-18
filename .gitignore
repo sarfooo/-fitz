@@ -1,4 +1,6 @@
 .env
+backend/.env
+frontend/.env.local
 
 # Personal reference photos — not meant for the shared repo
 /avatar/

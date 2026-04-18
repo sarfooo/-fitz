@@ -6,7 +6,8 @@ def extract_item(result):
         "size": result.get("size"),
         "image": cover.get("image_url") or cover.get("url"),
         "category": result.get("category_path") or result.get("category"),
-        "listing_id": result.get("id") or result.get("objectID"),
+        "listing_id": str(result.get("id") or result.get("objectID")),
+        "product_url": result.get("url"),
     }
 
 def extract_items_from_response(response):

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import tryon, browse, onboarding, closet, credits
+from app.routes import browse, closet, credits, onboarding, outfits, tryon
 
 settings = get_settings()
 
@@ -16,10 +16,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# app.include_router(tryon.router)
+app.include_router(tryon.router)
 app.include_router(browse.router)
 app.include_router(onboarding.router)
 app.include_router(closet.router)
+app.include_router(outfits.router)
 app.include_router(credits.router)
 
 
