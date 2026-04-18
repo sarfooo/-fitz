@@ -5,6 +5,7 @@ import Image from "next/image";
 
 interface TopBarProps {
   username: string;
+  displayName?: string | null;
   avatarUrl?: string;
   active?: "home" | "browse" | "closet" | "lookbook";
 }
@@ -16,7 +17,14 @@ const NAV_ITEMS: Array<{ id: TopBarProps["active"]; label: string }> = [
   { id: "lookbook", label: "LOOKBOOK" },
 ];
 
-export function TopBar({ username, avatarUrl, active = "browse" }: TopBarProps) {
+export function TopBar({
+  username,
+  displayName,
+  avatarUrl,
+  active = "browse",
+}: TopBarProps) {
+  const primaryLabel = displayName?.trim() || username;
+
   return (
     <header className="flex items-center justify-between px-6 py-3 border-b border-[color:var(--color-fc-border)] bg-black/70 backdrop-blur">
       <div className="flex items-baseline gap-4">
@@ -57,7 +65,7 @@ export function TopBar({ username, avatarUrl, active = "browse" }: TopBarProps) 
       <div className="flex items-center gap-3">
         <div className="hidden sm:block text-right leading-tight">
           <p className="text-[10px] uppercase tracking-widest text-white/50">welcome back,</p>
-          <p className="text-sm font-semibold neon-pink">{username}</p>
+          <p className="text-sm font-semibold neon-pink">{primaryLabel}</p>
         </div>
         <div className="w-10 h-10 rounded border border-[color:var(--color-fc-neon)]/60 overflow-hidden">
           {avatarUrl ? (

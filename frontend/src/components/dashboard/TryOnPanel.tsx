@@ -1,16 +1,28 @@
 "use client";
 
-import { Camera, Heart, PersonStanding, Shirt } from "lucide-react";
 import { useState } from "react";
+import { Camera, PersonStanding, Shirt } from "lucide-react";
+
+import type { MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
+import { addClosetItem } from "@/lib/api/backend";
 
 interface TryOnPanelProps {
   avatarUrl?: string;
+  currentItem?: MarketplaceItem | null;
+  wornItem?: MarketplaceItem | null;
+  onWearItem?: (item: MarketplaceItem | null) => void;
+  accessToken?: string | null;
 }
 
-export function TryOnPanel({ avatarUrl }: TryOnPanelProps) {
-  const [fit, setFit] = useState(50);
-  const [layering, setLayering] = useState(70);
-  const [showOriginal, setShowOriginal] = useState(false);
+export function TryOnPanel({
+  avatarUrl,
+  currentItem,
+  wornItem,
+  onWearItem,
+  accessToken,
+}: TryOnPanelProps) {
+  const hasSelectedItem = Boolean(currentItem);
+  const isWearingSelectedItem = Boolean(currentItem && wornItem?.id === currentItem.id);
 
   return (
     <section className="y2k-window p-5 flex flex-col gap-4 h-full overflow-hidden">
@@ -37,6 +49,29 @@ export function TryOnPanel({ avatarUrl }: TryOnPanelProps) {
               No avatar yet — generate one from your photos.
             </div>
           )}
+          {wornItem?.imageUrl ? (
+            <div className="absolute inset-x-6 top-6 bottom-20 pointer-events-none">
+              <div className="absolute top-0 right-0 liquid-glass rounded-lg px-3 py-2">
+                <p
+                  className="text-[10px] uppercase tracking-[0.24em] text-white/55"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  Wearing now
+                </p>
+                <p className="mt-1 max-w-[11rem] text-xs text-white/80 line-clamp-2">
+                  {wornItem.name}
+                </p>
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={wornItem.imageUrl}
+                  alt={wornItem.name}
+                  className="max-h-[70%] max-w-[68%] object-contain opacity-90 drop-shadow-[0_0_28px_rgba(255,38,185,0.22)]"
+                />
+              </div>
+            </div>
+          ) : null}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-64 h-10 rounded-full pointer-events-none"
                style={{
                  background:
@@ -47,34 +82,19 @@ export function TryOnPanel({ avatarUrl }: TryOnPanelProps) {
         </div>
 
         <aside className="w-64 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
-          <ItemCard />
-          <FitControls
-            fit={fit}
-            setFit={setFit}
-            layering={layering}
-            setLayering={setLayering}
+          <ItemCard
+            item={currentItem}
+            isWearingSelectedItem={isWearingSelectedItem}
+            hasSelectedItem={hasSelectedItem}
+            accessToken={accessToken ?? null}
+            onToggleWear={() => {
+              if (!currentItem) {
+                return;
+              }
+              onWearItem?.(isWearingSelectedItem ? null : currentItem);
+            }}
           />
         </aside>
-      </div>
-
-      <div className="flex items-center gap-2 justify-end">
-        <span className="text-[10px] tracking-[0.2em] text-white/60 uppercase" style={{ fontFamily: "var(--font-mono)" }}>
-          Show original
-        </span>
-        <button
-          type="button"
-          onClick={() => setShowOriginal((v) => !v)}
-          className={`relative w-10 h-5 rounded-full transition-colors ${
-            showOriginal ? "bg-[color:var(--color-fc-hot)]" : "bg-[color:var(--color-fc-panel-raised)] border border-[color:var(--color-fc-border)]"
-          }`}
-          aria-pressed={showOriginal}
-        >
-          <span
-            className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-              showOriginal ? "translate-x-5" : ""
-            }`}
-          />
-        </button>
       </div>
     </section>
   );
@@ -99,103 +119,99 @@ function ToolButton({ icon, label }: { icon: React.ReactNode; label: string }) {
   );
 }
 
-function ItemCard() {
+function ItemCard({
+  item,
+  hasSelectedItem,
+  isWearingSelectedItem,
+  accessToken,
+  onToggleWear,
+}: {
+  item?: MarketplaceItem | null;
+  hasSelectedItem: boolean;
+  isWearingSelectedItem: boolean;
+  accessToken: string | null;
+  onToggleWear: () => void;
+}) {
+  const [isSavingToCloset, setIsSavingToCloset] = useState(false);
+  const [closetSavedItemId, setClosetSavedItemId] = useState<string | null>(null);
+
+  const normalizedSize = item?.size
+    ? item.size
+        .trim()
+        .split(/\s+/)
+        .map((part) => part.toUpperCase())
+        .join(" ")
+    : "--";
+
+  async function handleAddToCloset() {
+    if (!item || isSavingToCloset) {
+      return;
+    }
+
+    try {
+      setIsSavingToCloset(true);
+      if (!accessToken) {
+        return;
+      }
+
+      await addClosetItem(accessToken, {
+        listing_id: item.id,
+        item_name: item.name,
+        price: item.price,
+        size: item.size ?? null,
+        image: item.imageUrl ?? null,
+        category: item.category ?? null,
+        source: item.source.toLowerCase(),
+        product_url: item.productUrl ?? null,
+      });
+      setClosetSavedItemId(item.id);
+    } finally {
+      setIsSavingToCloset(false);
+    }
+  }
+
+  const isSavedToCloset = Boolean(item && closetSavedItemId === item.id);
+
   return (
-    <div className="liquid-glass rounded-lg p-4 flex flex-col gap-3">
+    <div className="liquid-glass overflow-visible rounded-lg p-4 flex flex-col gap-3">
       <p
         className="text-[10px] tracking-[0.25em] neon-pink uppercase"
         style={{ fontFamily: "var(--font-mono)" }}
       >
         Current item
       </p>
-      <div>
-        <p className="text-lg font-semibold">VETEMENTS</p>
-        <p className="text-sm text-white/70">Star Knit Sweater</p>
+      <div className="space-y-2">
+        <p className="text-lg font-semibold">{item?.source ?? "No selection"}</p>
+        <p className="text-sm leading-7 text-white/70 break-words">
+          {item?.name ?? "Pick an item from marketplace"}
+        </p>
       </div>
       <div className="flex items-center justify-between text-xs">
         <span className="text-white/60">SIZE:</span>
-        <select className="bg-black/60 border border-[color:var(--color-fc-border)] px-2 py-1">
-          <option>L</option>
-          <option>M</option>
-          <option>S</option>
-        </select>
+        <span className="text-white uppercase">{normalizedSize}</span>
       </div>
       <div className="flex items-center justify-between text-xs">
         <span className="text-white/60">PRICE:</span>
-        <span className="text-white">$280</span>
+        <span className="text-white">{item?.price != null ? `$${item.price}` : "--"}</span>
       </div>
-      <button type="button" className="pill-btn w-full">
-        Add to closet
-      </button>
-      <button
-        type="button"
-        className="pill-btn-ghost w-full gap-2"
-      >
-        <Heart size={12} /> Save to wishlist
-      </button>
-    </div>
-  );
-}
-
-function FitControls({
-  fit,
-  setFit,
-  layering,
-  setLayering,
-}: {
-  fit: number;
-  setFit: (n: number) => void;
-  layering: number;
-  setLayering: (n: number) => void;
-}) {
-  return (
-    <div className="liquid-glass rounded-lg p-4 flex flex-col gap-4">
-      <p
-        className="text-[10px] tracking-[0.25em] neon-pink uppercase"
-        style={{ fontFamily: "var(--font-mono)" }}
-      >
-        Fit controls
-      </p>
-      <SliderRow label="Oversized ▸ Fitted" value={fit} onChange={setFit} />
-      <SliderRow label="Layering" value={layering} onChange={setLayering} />
-      <div>
-        <p
-          className="text-[10px] tracking-[0.25em] text-white/60 uppercase mb-1"
-          style={{ fontFamily: "var(--font-mono)" }}
+      <div className="px-1 pt-5 pb-5 flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={handleAddToCloset}
+          disabled={!hasSelectedItem}
+          className="pill-btn w-full disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Rotate
-        </p>
-        <p className="text-center text-xs neon-pink tracking-wider">&lt; drag to rotate &gt;</p>
+          {isSavingToCloset ? "Saving..." : isSavedToCloset ? "Added to closet" : "Add to closet"}
+        </button>
+        <button
+          type="button"
+          onClick={onToggleWear}
+          disabled={!hasSelectedItem}
+          className="pill-btn-ghost w-full disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isWearingSelectedItem ? "Remove item" : "Wear item"}
+        </button>
       </div>
     </div>
-  );
-}
-
-function SliderRow({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <label className="block">
-      <span
-        className="text-[10px] tracking-[0.25em] text-white/60 uppercase block mb-1"
-        style={{ fontFamily: "var(--font-mono)" }}
-      >
-        {label}
-      </span>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-[color:var(--color-fc-hot)]"
-      />
-    </label>
   );
 }
