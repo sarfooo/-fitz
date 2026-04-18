@@ -1,1 +1,5 @@
 .env
+
+# Personal reference photos — not meant for the shared repo
+/avatar/
+/avatar2/

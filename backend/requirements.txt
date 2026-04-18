@@ -19,6 +19,15 @@ typing-extensions>=4.12.0
 # ---- AI / Image generation ----
 dedalus-labs>=0.1.0
 Pillow>=11.0.0
+opencv-python-headless>=4.10.0
+numpy>=2.0.0
+higgsfield-client>=0.1.0
+
+# ---- Production WSGI ----
+gunicorn>=23.0.0
+
+# ---- Supabase (DB + Storage + Auth) ----
+supabase>=2.9.0
 
 # ---- CORS, auth helpers (scaffolding) ----
 python-jose[cryptography]>=3.3.0
