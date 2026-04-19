@@ -1,65 +1,266 @@
 "use client";
 
-import { useState } from "react";
-import { Camera, PersonStanding, Shirt } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Camera, Check, PersonStanding, Shirt } from "lucide-react";
 
+import type { GarmentSlot, OutfitSlots } from "@/components/dashboard/DashboardShell";
 import type { MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
-import { addClosetItem } from "@/lib/api/backend";
+import {
+  addClosetItem,
+  generateFit,
+  getRenderStatus,
+  saveRenderToLookbook,
+} from "@/lib/api/backend";
 
 interface TryOnPanelProps {
-  avatarUrl?: string;
+  avatarUrl?: string | null;
   currentItem?: MarketplaceItem | null;
-  wornItems?: MarketplaceItem[];
-  onToggleWearItem?: (item: MarketplaceItem) => void;
+  slots: OutfitSlots;
+  onWearItem: (item: MarketplaceItem, slot: GarmentSlot | null) => void;
+  onRemoveSlot: (slot: GarmentSlot) => void;
+  onResetOutfit: () => void;
   accessToken?: string | null;
+  avatarReady?: boolean;
+  onRequestAvatarSetup?: () => void;
+  onFitSaved?: () => void;
   onClosetSaved?: () => void;
+}
+
+type Mode = "base" | "rendered";
+
+function inferSlot(item: MarketplaceItem | null | undefined): GarmentSlot | null {
+  const category = item?.category?.toLowerCase();
+  if (!category) {
+    return null;
+  }
+  if (
+    category.startsWith("tops_") ||
+    /\b(shirt|polo|tee|t-shirt|sweater|knit|hoodie|jacket|coat|blazer|top)\b/.test(category)
+  ) {
+    return "top";
+  }
+  if (
+    category.startsWith("bottoms_") ||
+    /\b(pants|jean|trouser|short|denim|cargo|slack|bottom)\b/.test(category)
+  ) {
+    return "bottom";
+  }
+  return null;
 }
 
 export function TryOnPanel({
   avatarUrl,
   currentItem,
-  wornItems = [],
-  onToggleWearItem,
+  slots,
+  onWearItem,
+  onRemoveSlot,
+  onResetOutfit,
   accessToken,
+  avatarReady = true,
+  onRequestAvatarSetup,
+  onFitSaved,
   onClosetSaved,
 }: TryOnPanelProps) {
-  const hasSelectedItem = Boolean(currentItem);
-  const isWearingSelectedItem = Boolean(
-    currentItem && wornItems.some((item) => item.id === currentItem.id)
-  );
+  const [mode, setMode] = useState<Mode>("base");
+  const [renderedImage, setRenderedImage] = useState<string | null>(null);
+  const [lastRenderId, setLastRenderId] = useState<string | null>(null);
+  const [isRendering, setIsRendering] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [savingFit, setSavingFit] = useState(false);
+  const [savedFit, setSavedFit] = useState(false);
+  const pollAbortRef = useRef<{ cancelled: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!isRendering) {
+      return;
+    }
+    const started = performance.now();
+    const timer = window.setInterval(() => {
+      setElapsedMs(performance.now() - started);
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [isRendering]);
+
+  useEffect(() => {
+    return () => {
+      if (pollAbortRef.current) {
+        pollAbortRef.current.cancelled = true;
+      }
+    };
+  }, []);
+
+  function handleResetView() {
+    onResetOutfit();
+    setMode("base");
+    setRenderedImage(null);
+    setLastRenderId(null);
+    setRenderError(null);
+    setSavedFit(false);
+  }
+
+  async function pollForRender(token: string, renderId: string) {
+    const controller = { cancelled: false };
+    pollAbortRef.current = controller;
+
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      if (controller.cancelled) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (controller.cancelled) {
+        return;
+      }
+
+      try {
+        const status = await getRenderStatus(token, renderId);
+        if (status.status === "ready" && status.image?.signed_url) {
+          setRenderedImage(status.image.signed_url);
+          setLastRenderId(renderId);
+          setSavedFit(false);
+          setMode("rendered");
+          return;
+        }
+        if (status.status === "failed") {
+          setRenderError(status.error || "Render failed.");
+          return;
+        }
+      } catch {
+        // Keep polling through transient backend errors.
+      }
+    }
+
+    setRenderError("Render is taking longer than expected. Try again.");
+  }
+
+  async function handleRenderOutfit() {
+    setRenderError(null);
+
+    if (!slots.top || !slots.bottom) {
+      setRenderError("Wear a top and a bottom before rendering.");
+      return;
+    }
+    if (!slots.top.imageUrl || !slots.bottom.imageUrl) {
+      setRenderError("Both worn items need an image before rendering.");
+      return;
+    }
+    if (!accessToken) {
+      setRenderError("You need to be logged in to render a fit.");
+      return;
+    }
+    if (!avatarReady) {
+      setRenderError("Set up your avatar first.");
+      onRequestAvatarSetup?.();
+      return;
+    }
+
+    setIsRendering(true);
+    setElapsedMs(0);
+    setRenderedImage(null);
+    setSavedFit(false);
+
+    try {
+      const start = await generateFit(accessToken, {
+        top: { image_url: slots.top.imageUrl, name: slots.top.name },
+        bottom: { image_url: slots.bottom.imageUrl, name: slots.bottom.name },
+      });
+      await pollForRender(accessToken, start.render_id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Render failed.";
+      if (/avatar/i.test(message)) {
+        onRequestAvatarSetup?.();
+      }
+      setRenderError(message);
+    } finally {
+      setIsRendering(false);
+    }
+  }
+
+  async function handleSaveFit() {
+    if (!lastRenderId || !accessToken || savingFit || savedFit) {
+      return;
+    }
+
+    setSavingFit(true);
+    try {
+      const name =
+        [slots.top?.name, slots.bottom?.name].filter(Boolean).join(" + ") || null;
+      const response = await saveRenderToLookbook(accessToken, lastRenderId, name);
+      if (response.success) {
+        setSavedFit(true);
+        onFitSaved?.();
+      } else {
+        setRenderError(response.error || "Failed to save outfit.");
+      }
+    } catch (err: unknown) {
+      setRenderError(err instanceof Error ? err.message : "Failed to save outfit.");
+    } finally {
+      setSavingFit(false);
+    }
+  }
 
   return (
     <section className="y2k-window p-5 flex flex-col gap-4 h-full overflow-hidden">
-      <h2
-        className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase"
-        style={{ fontFamily: "var(--font-pixel)" }}
-      >
-        Virtual Try-On
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2
+          className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase"
+          style={{ fontFamily: "var(--font-pixel)" }}
+        >
+          Virtual Try-On
+        </h2>
+        {mode === "rendered" ? (
+          <button
+            type="button"
+            onClick={handleResetView}
+            className="text-[0.95rem] uppercase text-white/65 hover:text-white"
+            style={{ fontFamily: "var(--font-pixel)" }}
+          >
+            Reset
+          </button>
+        ) : null}
+      </div>
 
       <div className="flex-1 flex gap-5 overflow-hidden">
         <aside className="flex flex-col gap-5 pt-2 shrink-0">
-          <ToolButton icon={<PersonStanding size={22} />} label="Body" />
+          <ToolButton icon={<PersonStanding size={22} />} label="Body" onClick={handleResetView} />
           <ToolButton icon={<Shirt size={22} />} label="Closet" />
           <ToolButton icon={<Camera size={22} />} label="Screenshot" />
+          {savedFit ? <ToolButton icon={<Check size={22} />} label="Saved" active /> : null}
         </aside>
 
         <div className="flex-1 relative flex items-end justify-center overflow-hidden rounded-lg bg-black/60 border border-[color:var(--color-fc-border)]">
-          {avatarUrl ? (
+          {mode === "rendered" && renderedImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={renderedImage} alt="rendered outfit" className="h-full w-auto object-contain" />
+          ) : avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={avatarUrl} alt="your avatar" className="h-full w-auto object-contain" />
           ) : (
-            <div className="h-full w-full flex items-center justify-center text-white/40 text-sm">
-              No avatar yet — generate one from your photos.
+            <div className="h-full w-full flex flex-col items-center justify-center gap-3 p-6 text-center">
+              <p className="text-white/60 text-sm">
+                No avatar yet. Capture your look so rendered fits look like you.
+              </p>
+              {onRequestAvatarSetup ? (
+                <button type="button" onClick={onRequestAvatarSetup} className="pill-btn">
+                  Set up avatar
+                </button>
+              ) : null}
             </div>
           )}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-64 h-10 rounded-full pointer-events-none"
-               style={{
-                 background:
-                   "radial-gradient(ellipse, rgba(201,64,255,0.55) 0%, rgba(201,64,255,0) 70%)",
-                 filter: "blur(6px)",
-               }}
-          />
+
+          {isRendering ? <RenderingOverlay elapsedMs={elapsedMs} /> : null}
+
+          {!isRendering && renderError ? (
+            <div className="absolute inset-x-4 top-4 z-10 liquid-glass rounded-lg p-3 border border-rose-400/60 bg-rose-500/20">
+              <p
+                className="text-[0.8rem] uppercase text-rose-200 mb-1"
+                style={{ fontFamily: "var(--font-pixel)" }}
+              >
+                Render error
+              </p>
+              <p className="text-sm text-white/90 leading-snug">{renderError}</p>
+            </div>
+          ) : null}
 
           <div
             className={`absolute right-5 top-5 bottom-5 w-[18.5rem] max-w-[36%] flex items-start transition-all duration-300 ease-out ${
@@ -69,26 +270,34 @@ export function TryOnPanel({
             }`}
             data-selection-anchor="true"
           >
-            <ItemCard
+            <CurrentItemCard
               item={currentItem}
-              hasSelectedItem={hasSelectedItem}
-              isWearingSelectedItem={isWearingSelectedItem}
+              slots={slots}
               accessToken={accessToken ?? null}
+              onWearItem={onWearItem}
               onClosetSaved={onClosetSaved}
-              onToggleWear={() => {
-                if (!currentItem) {
-                  return;
-                }
-                onToggleWearItem?.(currentItem);
-              }}
             />
           </div>
+
+          <div
+            className="absolute bottom-6 left-1/2 -translate-x-1/2 w-64 h-10 rounded-full pointer-events-none"
+            style={{
+              background: "radial-gradient(ellipse, rgba(201,64,255,0.55) 0%, rgba(201,64,255,0) 70%)",
+              filter: "blur(6px)",
+            }}
+          />
         </div>
 
         <aside className="w-72 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
-          <WornItemsPanel
-            wornItems={wornItems}
-            onToggleWearItem={onToggleWearItem}
+          <WearingNowPanel
+            slots={slots}
+            isRendering={isRendering}
+            onRemoveSlot={onRemoveSlot}
+            onRender={handleRenderOutfit}
+            onSaveFit={handleSaveFit}
+            saveVisible={Boolean(renderedImage && lastRenderId)}
+            savingFit={savingFit}
+            savedFit={savedFit}
           />
         </aside>
       </div>
@@ -96,88 +305,83 @@ export function TryOnPanel({
   );
 }
 
-function WornItemsPanel({
-  wornItems,
-  onToggleWearItem,
-}: {
-  wornItems: MarketplaceItem[];
-  onToggleWearItem?: (item: MarketplaceItem) => void;
-}) {
+function RenderingOverlay({ elapsedMs }: { elapsedMs: number }) {
+  const seconds = Math.floor(elapsedMs / 1000);
+  const tenths = Math.floor((elapsedMs % 1000) / 100);
+  const pct = Math.min(99, Math.floor((seconds / 30) * 100));
+
+  const stage =
+    seconds < 4
+      ? "Reading your garments"
+      : seconds < 10
+      ? "Matching colors and cut"
+      : seconds < 20
+      ? "Styling the avatar"
+      : seconds < 30
+      ? "Final composition"
+      : "Almost done";
+
   return (
-    <div className="liquid-glass overflow-hidden rounded-lg p-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <p
-          className="text-[18px] tracking-[0.08em] neon-pink uppercase"
-          style={{ fontFamily: "var(--font-pixel)" }}
-        >
-          Wearing Now
-        </p>
-        <p className="text-[0.9rem] uppercase text-white/50">{wornItems.length} items</p>
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm gap-5 p-6">
+      <div
+        className="text-[0.8rem] uppercase text-white/70"
+        style={{ fontFamily: "var(--font-pixel)" }}
+      >
+        Rendering outfit
       </div>
 
-      {wornItems.length === 0 ? (
-        <p className="text-[0.95rem] leading-5 text-white/55">
-          Add pieces from the marketplace and they&apos;ll stack here.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-3 max-h-[19rem] overflow-y-auto pr-1">
-          {wornItems.map((item) => (
-            <div
-              key={item.id}
-              className="border border-[color:var(--color-fc-border)] bg-black/20 p-2 rounded-sm flex gap-3 items-start"
-              data-selection-anchor="true"
-            >
-              <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-sm border border-[color:var(--color-fc-border)] bg-white/5">
-                {item.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.imageUrl}
-                    alt={item.name}
-                    className="absolute inset-0 h-full w-full object-cover bg-neutral-100"
-                  />
-                ) : null}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[0.9rem] uppercase text-white/50">{item.source}</p>
-                <p className="text-[1rem] leading-5 text-white/85 break-words">{item.name}</p>
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="text-[0.9rem] text-white/55">
-                    {item.price != null ? `$${item.price}` : "--"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onToggleWearItem?.(item)}
-                    className="pill-btn-ghost px-3 py-1 text-[0.8rem]"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div
+        className="text-5xl font-black tabular-nums chrome-text"
+        style={{ fontFamily: "var(--font-retro)" }}
+      >
+        {seconds.toString().padStart(2, "0")}.{tenths}s
+      </div>
 
-      {wornItems.length > 0 ? (
-        <button
-          type="button"
-          className="w-full border border-[#ff7ddd] bg-[linear-gradient(180deg,#f08be4_0%,#d960cf_100%)] px-4 py-3 text-[1.1rem] uppercase text-[#22061e] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_0_18px_rgba(255,38,185,0.15)]"
+      <div className="w-64 max-w-full space-y-2">
+        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/10 border border-[color:var(--color-fc-border)]">
+          <div
+            className="h-full transition-[width] duration-300 ease-out"
+            style={{
+              width: `${pct}%`,
+              background: "linear-gradient(90deg, var(--color-fc-neon) 0%, var(--color-fc-hot) 100%)",
+              boxShadow: "0 0 10px rgba(201,64,255,0.6)",
+            }}
+          />
+        </div>
+        <div
+          className="flex items-center justify-between text-[0.8rem] uppercase text-white/60"
           style={{ fontFamily: "var(--font-pixel)" }}
         >
-          Render Outfit
-        </button>
-      ) : null}
+          <span>{stage}</span>
+          <span>{pct}%</span>
+        </div>
+      </div>
     </div>
   );
 }
 
-function ToolButton({ icon, label }: { icon: React.ReactNode; label: string }) {
+function ToolButton({
+  icon,
+  label,
+  onClick,
+  active = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  active?: boolean;
+}) {
   return (
     <button
       type="button"
-      className="flex flex-col items-center gap-1 text-white/80 hover:text-white transition-colors"
+      onClick={onClick}
+      className={`flex flex-col items-center gap-1 ${active ? "text-white" : "text-white/80 hover:text-white"} transition-colors`}
     >
-      <span className="w-12 h-12 flex items-center justify-center border border-[color:var(--color-fc-border)] bg-[color:var(--color-fc-panel)] hover:border-[color:var(--color-fc-neon)]">
+      <span
+        className={`w-12 h-12 flex items-center justify-center border bg-[color:var(--color-fc-panel)] ${
+          active ? "border-[color:var(--color-fc-hot)]" : "border-[color:var(--color-fc-border)] hover:border-[color:var(--color-fc-neon)]"
+        }`}
+      >
         {icon}
       </span>
       <span
@@ -190,32 +394,29 @@ function ToolButton({ icon, label }: { icon: React.ReactNode; label: string }) {
   );
 }
 
-function ItemCard({
+function CurrentItemCard({
   item,
-  hasSelectedItem,
-  isWearingSelectedItem,
+  slots,
   accessToken,
+  onWearItem,
   onClosetSaved,
-  onToggleWear,
 }: {
   item?: MarketplaceItem | null;
-  hasSelectedItem: boolean;
-  isWearingSelectedItem: boolean;
+  slots: OutfitSlots;
   accessToken: string | null;
+  onWearItem: (item: MarketplaceItem, slot: GarmentSlot | null) => void;
   onClosetSaved?: () => void;
-  onToggleWear: () => void;
 }) {
   const [isSavingToCloset, setIsSavingToCloset] = useState(false);
   const [closetSavedItemId, setClosetSavedItemId] = useState<string | null>(null);
   const [closetError, setClosetError] = useState<string | null>(null);
 
+  const hasSelectedItem = Boolean(item);
   const normalizedSize = item?.size
-    ? item.size
-        .trim()
-        .split(/\s+/)
-        .map((part) => part.toUpperCase())
-        .join(" ")
+    ? item.size.trim().split(/\s+/).map((part) => part.toUpperCase()).join(" ")
     : "--";
+  const inferredSlot = inferSlot(item);
+  const isWearingSelectedItem = Boolean(item && (slots.top?.id === item.id || slots.bottom?.id === item.id));
 
   async function handleAddToCloset() {
     if (!item || isSavingToCloset) {
@@ -295,17 +496,123 @@ function ItemCard({
         </button>
         <button
           type="button"
-          onClick={onToggleWear}
+          onClick={() => item && onWearItem(item, inferredSlot)}
           disabled={!hasSelectedItem}
           className="w-full border border-white/22 bg-transparent px-4 py-3 text-[1.05rem] uppercase text-white/88 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ fontFamily: "var(--font-pixel)" }}
         >
           {isWearingSelectedItem ? "Remove item" : "Wear item"}
         </button>
-        {closetError ? (
-          <p className="text-[0.82rem] text-rose-300">{closetError}</p>
-        ) : null}
+        {closetError ? <p className="text-[0.82rem] text-rose-300">{closetError}</p> : null}
       </div>
+    </div>
+  );
+}
+
+function WearingNowPanel({
+  slots,
+  isRendering,
+  onRemoveSlot,
+  onRender,
+  onSaveFit,
+  saveVisible,
+  savingFit,
+  savedFit,
+}: {
+  slots: OutfitSlots;
+  isRendering: boolean;
+  onRemoveSlot: (slot: GarmentSlot) => void;
+  onRender: () => void;
+  onSaveFit: () => void;
+  saveVisible: boolean;
+  savingFit: boolean;
+  savedFit: boolean;
+}) {
+  const wornEntries = [
+    { slot: "top" as GarmentSlot, item: slots.top },
+    { slot: "bottom" as GarmentSlot, item: slots.bottom },
+  ].filter((entry) => Boolean(entry.item));
+
+  return (
+    <div className="liquid-glass overflow-hidden rounded-lg p-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <p
+          className="text-[18px] tracking-[0.08em] neon-pink uppercase"
+          style={{ fontFamily: "var(--font-pixel)" }}
+        >
+          Wearing Now
+        </p>
+        <p className="text-[0.9rem] uppercase text-white/50">{wornEntries.length} items</p>
+      </div>
+
+      {wornEntries.length === 0 ? (
+        <p className="text-[0.95rem] leading-5 text-white/55">
+          Add pieces from the marketplace and they&apos;ll stack here.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3 max-h-[19rem] overflow-y-auto pr-1">
+          {wornEntries.map(({ slot, item }) =>
+            item ? (
+              <div
+                key={`${slot}-${item.id}`}
+                className="border border-[color:var(--color-fc-border)] bg-black/20 p-2 rounded-sm flex gap-3 items-start"
+                data-selection-anchor="true"
+              >
+                <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-sm border border-[color:var(--color-fc-border)] bg-white/5">
+                  {item.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="absolute inset-0 h-full w-full object-cover bg-neutral-100"
+                    />
+                  ) : null}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[0.9rem] uppercase text-white/50">{slot}</p>
+                  <p className="text-[1rem] leading-5 text-white/85 break-words">{item.name}</p>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-[0.9rem] text-white/55">
+                      {item.price != null ? `$${item.price}` : "--"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveSlot(slot)}
+                      className="pill-btn-ghost px-3 py-1 text-[0.8rem]"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null
+          )}
+        </div>
+      )}
+
+      {wornEntries.length > 0 ? (
+        <button
+          type="button"
+          onClick={onRender}
+          disabled={isRendering}
+          className="w-full border border-[#ff7ddd] bg-[linear-gradient(180deg,#f08be4_0%,#d960cf_100%)] px-4 py-3 text-[1.1rem] uppercase text-[#22061e] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_0_18px_rgba(255,38,185,0.15)] disabled:opacity-50 disabled:cursor-wait"
+          style={{ fontFamily: "var(--font-pixel)" }}
+        >
+          {isRendering ? "Rendering..." : "Render outfit"}
+        </button>
+      ) : null}
+
+      {saveVisible ? (
+        <button
+          type="button"
+          onClick={onSaveFit}
+          disabled={savingFit || savedFit}
+          className="w-full border border-white/22 bg-transparent px-4 py-3 text-[1.05rem] uppercase text-white/88 disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ fontFamily: "var(--font-pixel)" }}
+        >
+          {savingFit ? "Saving..." : savedFit ? "Saved to outfits" : "Save to outfits"}
+        </button>
+      ) : null}
     </div>
   );
 }

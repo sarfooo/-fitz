@@ -2,15 +2,17 @@
 
 import Image from "next/image";
 
+export type TopBarView = "home" | "closet" | "lookbook";
+
 interface TopBarProps {
   username: string;
   displayName?: string | null;
-  avatarUrl?: string;
-  active?: "home" | "closet" | "lookbook";
-  onNavigate?: (view: NonNullable<TopBarProps["active"]>) => void;
+  avatarUrl?: string | null;
+  active?: TopBarView;
+  onNavigate?: (view: TopBarView) => void;
 }
 
-const NAV_ITEMS: Array<{ id: TopBarProps["active"]; label: string }> = [
+const NAV_ITEMS: Array<{ id: TopBarView; label: string }> = [
   { id: "home", label: "HOME" },
   { id: "closet", label: "CLOSET" },
   { id: "lookbook", label: "OUTFITS" },

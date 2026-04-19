@@ -2,6 +2,7 @@ from app.services.credits import get_credit_summary, spend_credits
 from app.services.image_gen import (
     acompose_from_references,
     acompose_outfit,
+    acompose_with_gpt_image,
     aedit_image,
     agenerate_image,
 )
@@ -30,6 +31,7 @@ def credits_remaining(user_id: str) -> int:
 __all__ = [
     "acompose_from_references",
     "acompose_outfit",
+    "acompose_with_gpt_image",
     "aedit_image",
     "agenerate_image",
     "build_avatar_from_photo_prompt",

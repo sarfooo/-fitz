@@ -106,8 +106,8 @@ async def agenerate_image(
     size: ImageSize = "1024x1024",
     quality: ImageQuality = "high",
     n: int = 1,
-    response_format: ResponseFormat = "url",
-    output_format: OutputFormat = "png",
+    response_format: ResponseFormat | None = None,
+    output_format: OutputFormat | None = None,
     model: str | None = None,
     user: str | None = None,
 ) -> list[GeneratedImage]:
@@ -116,9 +116,13 @@ async def agenerate_image(
         "size": size,
         "quality": quality,
         "n": n,
-        "response_format": response_format,
-        "output_format": output_format,
     }
+    # gpt-image-1 does not accept response_format / output_format; only include
+    # when the caller explicitly opts in (e.g. dall-e-3 path).
+    if response_format is not None:
+        kwargs["response_format"] = response_format
+    if output_format is not None:
+        kwargs["output_format"] = output_format
     if model:
         kwargs["model"] = model
     if user:
@@ -234,3 +238,46 @@ async def acompose_outfit(
             messages=[{"role": "user", "content": parts}],
         )
     return _extract_images_from_chat(completion)
+
+
+def _ext_for(mime: str) -> str:
+    if "png" in mime:
+        return "png"
+    if "webp" in mime:
+        return "webp"
+    return "jpg"
+
+
+async def acompose_with_gpt_image(
+    *,
+    images: list[tuple[bytes, str]],
+    prompt: str,
+    size: str = "1024x1536",
+    quality: str | None = None,  # unused on Dedalus SDK's edit endpoint
+    n: int = 1,
+    model: str = "openai/gpt-image-1",
+) -> list[GeneratedImage]:
+    """Multi-image compose via gpt-image-1's images.edit endpoint.
+
+    gpt-image-1 accepts an array of reference images on the edit endpoint. We
+    wrap each (bytes, mime) tuple into a named file tuple the SDK expects:
+    ``(filename, bytes, mime)``. The ``quality`` param is accepted but unused
+    because the Dedalus SDK's images.edit() does not forward it.
+    """
+    if not images:
+        raise ValueError("at least one reference image is required")
+    image_tuples = [
+        (f"ref_{i}.{_ext_for(mime)}", data, mime)
+        for i, (data, mime) in enumerate(images)
+    ]
+    kwargs: dict = {
+        "model": model,
+        "image": image_tuples if len(image_tuples) > 1 else image_tuples[0],
+        "prompt": prompt,
+        "n": n,
+    }
+    if size:
+        kwargs["size"] = size
+    async with _async_client() as client:
+        raw = await client.images.edit(**kwargs)
+    return _unwrap(raw)

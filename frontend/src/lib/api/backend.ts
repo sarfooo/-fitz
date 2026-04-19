@@ -76,7 +76,16 @@ function getBackendBaseUrl() {
 
 async function parseJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const message = await response.text();
+    const text = await response.text();
+    let message = text;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && "detail" in parsed) {
+        message = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
+      }
+    } catch {
+      // not JSON — keep raw text
+    }
     throw new Error(message || `Request failed with ${response.status}`);
   }
 
@@ -141,4 +150,156 @@ export async function deleteClosetItem(accessToken: string, closetItemId: string
   });
 
   return parseJson<DeleteClosetItemResponse>(response);
+}
+
+export interface FitGarmentInput {
+  image_url: string;
+  name?: string | null;
+}
+
+export interface FitRequestPayload {
+  top: FitGarmentInput;
+  bottom: FitGarmentInput;
+  fit_preference?: "fitted" | "regular" | "oversized" | "baggy";
+}
+
+export interface GeneratedImage {
+  url: string | null;
+  b64_json: string | null;
+  revised_prompt: string | null;
+  storage_path: string | null;
+  bucket: string | null;
+  signed_url: string | null;
+}
+
+export interface TryOnResponse {
+  success: boolean;
+  render_id: string | null;
+  image: GeneratedImage | null;
+  prompt_used: string | null;
+  credits_remaining: number | null;
+  error: string | null;
+}
+
+export type RenderStatus = "pending" | "ready" | "failed";
+
+export interface FitStartResponse {
+  render_id: string;
+  status: RenderStatus;
+}
+
+export interface FitStatusResponse {
+  render_id: string;
+  status: RenderStatus;
+  image: GeneratedImage | null;
+  error: string | null;
+  credits_remaining: number | null;
+}
+
+export async function generateFit(
+  accessToken: string,
+  payload: FitRequestPayload,
+) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/tryon/fit`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJson<FitStartResponse>(response);
+}
+
+export async function getRenderStatus(accessToken: string, renderId: string) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/tryon/render/${renderId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  return parseJson<FitStatusResponse>(response);
+}
+
+export interface LookbookFit {
+  render_id: string;
+  name: string | null;
+  image_url: string | null;
+  created_at: string;
+}
+
+export interface LookbookResponse {
+  fits: LookbookFit[];
+}
+
+export interface SaveFitResponse {
+  success: boolean;
+  fit: LookbookFit | null;
+  error: string | null;
+}
+
+export async function fetchLookbook(accessToken: string) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/tryon/lookbook`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  return parseJson<LookbookResponse>(response);
+}
+
+export async function saveRenderToLookbook(
+  accessToken: string,
+  renderId: string,
+  name?: string | null,
+) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/tryon/render/${renderId}/save`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name: name ?? null }),
+  });
+  return parseJson<SaveFitResponse>(response);
+}
+
+export interface AvatarIdentity {
+  avatar_id: string;
+  identity_description: string;
+  image_url: string | null;
+}
+
+export interface CurrentAvatarResponse {
+  avatar: AvatarIdentity | null;
+}
+
+export interface CaptureIdentityResponse {
+  success: boolean;
+  avatar: AvatarIdentity | null;
+  error: string | null;
+}
+
+export async function fetchCurrentAvatar(accessToken: string) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/tryon/avatar/current`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  return parseJson<CurrentAvatarResponse>(response);
+}
+
+export async function captureAvatarIdentity(accessToken: string, files: File[]) {
+  const baseUrl = getBackendBaseUrl();
+  const form = new FormData();
+  for (const file of files) {
+    form.append("references", file, file.name);
+  }
+  const response = await fetch(`${baseUrl}/tryon/avatar/identity`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  return parseJson<CaptureIdentityResponse>(response);
 }

@@ -12,7 +12,7 @@ export interface MarketplaceItem {
   price: number | null;
   category?: string | null;
   size?: string | null;
-  imageUrl?: string;
+  imageUrl?: string | null;
   productUrl?: string | null;
 }
 
@@ -70,10 +70,7 @@ export function MarketplacePanel({
         if (!cancelled) {
           const nextItems = data.items.map(mapBrowseItem);
           setItems(nextItems);
-          if (
-            selectedItemId &&
-            !nextItems.some((item) => item.id === selectedItemId)
-          ) {
+          if (selectedItemId && !nextItems.some((item) => item.id === selectedItemId)) {
             onSelectItem?.(null);
           }
         }
@@ -98,9 +95,8 @@ export function MarketplacePanel({
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmed = query.trim();
     setPage(0);
-    setSubmittedQuery(trimmed);
+    setSubmittedQuery(query.trim());
   }
 
   return (
@@ -117,7 +113,7 @@ export function MarketplacePanel({
           <Search size={14} className="text-white/40" />
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(event) => setQuery(event.target.value)}
             placeholder="Search for pieces..."
             className="flex-1 bg-transparent text-[18px] placeholder:text-white/40 focus:outline-none"
           />
@@ -137,9 +133,7 @@ export function MarketplacePanel({
         <span style={{ fontFamily: "var(--font-pixel)" }}>
           {loading ? "Loading results..." : `${items.length} items`}
         </span>
-        <span style={{ fontFamily: "var(--font-pixel)" }}>
-          Page {page + 1}
-        </span>
+        <span style={{ fontFamily: "var(--font-pixel)" }}>Page {page + 1}</span>
       </div>
 
       <div className="flex-1 grid grid-cols-2 gap-3 overflow-y-auto pr-1 min-h-0 content-start auto-rows-max">
@@ -159,7 +153,10 @@ export function MarketplacePanel({
       </div>
 
       <div className="flex items-center justify-between pt-1">
-        <p className="text-[14px] tracking-[0.08em] text-white/50 uppercase max-w-[50%] truncate" style={{ fontFamily: "var(--font-pixel)" }}>
+        <p
+          className="text-[14px] tracking-[0.08em] text-white/50 uppercase max-w-[50%] truncate"
+          style={{ fontFamily: "var(--font-pixel)" }}
+        >
           {submittedQuery ? `Results for ${submittedQuery}` : "Search Grailed"}
         </p>
         <div className="flex items-center gap-2">
@@ -195,11 +192,19 @@ function ItemCard({
   onSelect: () => void;
 }) {
   const [saved, setSaved] = useState(false);
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
-      className="text-left group"
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      className="text-left group cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--color-fc-neon)]"
       data-selection-anchor="true"
     >
       <div
@@ -221,7 +226,7 @@ function ItemCard({
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            setSaved((s) => !s);
+            setSaved((current) => !current);
           }}
           aria-pressed={saved}
           aria-label={saved ? "Unsave" : "Save"}
@@ -241,7 +246,9 @@ function ItemCard({
           {item.name}
         </p>
         {item.category ? (
-          <p className="text-[14px] text-white/55 uppercase tracking-[0.08em] mt-1 line-clamp-1">{item.category}</p>
+          <p className="text-[14px] text-white/55 uppercase tracking-[0.08em] mt-1 line-clamp-1">
+            {item.category}
+          </p>
         ) : null}
         <div className="mt-1 flex items-center justify-between gap-2">
           <p className="text-[22px] leading-none text-white/90">
@@ -262,6 +269,6 @@ function ItemCard({
           </a>
         ) : null}
       </div>
-    </button>
+    </div>
   );
 }
