@@ -41,10 +41,15 @@ export default function SignupPage() {
     setLoading(true);
     try {
       const supabase = createClient();
+      const emailRedirectTo =
+        typeof window !== "undefined" ? `${window.location.origin}/login` : undefined;
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: { data: { username } },
+        options: {
+          data: { username },
+          emailRedirectTo,
+        },
       });
 
       if (signUpError) {
@@ -75,7 +80,7 @@ export default function SignupPage() {
 
       // Email confirmation flow — no session yet. User finishes signup via email link.
       setInfo(
-        "Check your email to confirm your account, then log in to set your username."
+        "Check your email for a confirmation link, then return to log in."
       );
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unexpected error");
