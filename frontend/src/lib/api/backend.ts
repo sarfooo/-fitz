@@ -59,6 +59,11 @@ export interface CommunityOutfitsResponse {
   outfits: CommunityOutfit[];
 }
 
+export interface DeleteSavedOutfitResponse {
+  success: boolean;
+  outfit_id: string;
+}
+
 export interface AddSavedOutfitRequest {
   name: string;
   closet_item_ids: string[];
@@ -197,6 +202,18 @@ export async function addClosetItem(accessToken: string, payload: AddClosetItemR
   });
 
   return parseJson<AddClosetItemResponse>(response);
+}
+
+export async function deleteOutfit(accessToken: string, outfitId: string) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/outfits/${outfitId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  return parseJson<DeleteSavedOutfitResponse>(response);
 }
 
 export async function deleteClosetItem(accessToken: string, closetItemId: string) {

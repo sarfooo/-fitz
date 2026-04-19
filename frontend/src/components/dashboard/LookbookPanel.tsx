@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 
 import { OutfitDetailModal } from "@/components/dashboard/OutfitDetailModal";
-import { fetchOutfits, type SavedOutfit } from "@/lib/api/backend";
+import { deleteOutfit, fetchOutfits, type SavedOutfit } from "@/lib/api/backend";
 
 interface LookbookPanelProps {
   accessToken?: string | null;
@@ -21,6 +21,7 @@ export function LookbookPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedOutfit, setSelectedOutfit] = useState<SavedOutfit | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) {
@@ -69,6 +70,24 @@ export function LookbookPanel({
     }
   }
 
+  async function handleRemoveOutfit(outfitId: string) {
+    if (!accessToken || removingId) {
+      return;
+    }
+
+    try {
+      setRemovingId(outfitId);
+      setError(null);
+      await deleteOutfit(accessToken, outfitId);
+      setOutfits((current) => current.filter((outfit) => outfit.id !== outfitId));
+      setSelectedOutfit((current) => (current?.id === outfitId ? null : current));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove outfit.");
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
   return (
     <section className="y2k-window p-5 flex flex-col gap-3 h-full overflow-hidden">
       <div className="flex items-center justify-between">
@@ -96,33 +115,48 @@ export function LookbookPanel({
 
       <div className="flex-1 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto pr-1 min-h-0 content-start auto-rows-max">
         {outfits.map((outfit) => (
-          <button
+          <div
             key={outfit.id}
-            type="button"
-            onClick={() => setSelectedOutfit(outfit)}
-            className="group text-left"
+            className="group relative"
           >
-            <div className="relative aspect-[4/5] bg-white/5 border border-[color:var(--color-fc-border)] overflow-hidden rounded-sm group-hover:border-[color:var(--color-fc-hot)] transition-colors">
-              {outfit.cover_image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={outfit.cover_image}
-                  alt={outfit.name || "saved outfit"}
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-[10px] text-white/40 uppercase tracking-widest">
-                  No image
-                </div>
-              )}
-            </div>
-            <p className="mt-2 text-[10px] font-semibold neon-pink line-clamp-1">
-              {outfit.name || "Untitled outfit"}
-            </p>
-            <p className="text-[9px] text-white/55">
-              {outfit.item_count} items
-            </p>
-          </button>
+            <button
+              type="button"
+              onClick={() => setSelectedOutfit(outfit)}
+              className="block w-full text-left"
+            >
+              <div className="relative aspect-[4/5] bg-white/5 border border-[color:var(--color-fc-border)] overflow-hidden rounded-sm group-hover:border-[color:var(--color-fc-hot)] transition-colors">
+                {outfit.cover_image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={outfit.cover_image}
+                    alt={outfit.name || "saved outfit"}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-[10px] text-white/40 uppercase tracking-widest">
+                    No image
+                  </div>
+                )}
+              </div>
+              <p className="mt-2 text-[10px] font-semibold neon-pink line-clamp-1">
+                {outfit.name || "Untitled outfit"}
+              </p>
+              <p className="text-[9px] text-white/55">
+                {outfit.item_count} items
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleRemoveOutfit(outfit.id)}
+              disabled={removingId === outfit.id}
+              className="absolute right-2 top-2 z-10 rounded bg-black/70 p-1.5 text-white/70 transition hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={`remove ${outfit.name || "saved outfit"}`}
+              title="Remove outfit"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
         ))}
 
         {!loading && outfits.length === 0 && !error ? (
