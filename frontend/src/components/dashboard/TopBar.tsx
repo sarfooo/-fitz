@@ -1,8 +1,13 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { ChevronDown } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-export type TopBarView = "home" | "closet" | "lookbook";
+import { createClient } from "@/lib/supabase/client";
+
+export type TopBarView = "home" | "closet" | "lookbook" | "suggestions";
 
 interface TopBarProps {
   username: string;
@@ -16,6 +21,7 @@ const NAV_ITEMS: Array<{ id: TopBarView; label: string }> = [
   { id: "home", label: "HOME" },
   { id: "closet", label: "CLOSET" },
   { id: "lookbook", label: "OUTFITS" },
+  { id: "suggestions", label: "SUGGESTIONS" },
 ];
 
 export function TopBar({
@@ -26,6 +32,38 @@ export function TopBar({
   onNavigate,
 }: TopBarProps) {
   const primaryLabel = displayName?.trim() || username;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  async function handleLogout() {
+    if (isLoggingOut) {
+      return;
+    }
+
+    try {
+      setIsLoggingOut(true);
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.push("/login");
+      router.refresh();
+    } finally {
+      setIsLoggingOut(false);
+      setMenuOpen(false);
+    }
+  }
 
   return (
     <header className="flex items-center justify-between px-6 py-3 border-b border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(10,4,16,0.98)_0%,rgba(5,0,8,0.96)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_32px_rgba(0,0,0,0.38)] backdrop-blur">
@@ -65,7 +103,7 @@ export function TopBar({
         })}
       </nav>
 
-      <div className="flex items-center gap-3">
+      <div className="relative flex items-center gap-3" ref={menuRef} data-selection-anchor="true">
         <div className="hidden sm:block text-right leading-tight">
           <p
             className="text-[16px] text-white/55"
@@ -80,19 +118,41 @@ export function TopBar({
             {primaryLabel}
           </p>
         </div>
-        <div className="w-10 h-10 rounded border border-[color:var(--color-fc-neon)]/60 overflow-hidden">
-          {avatarUrl ? (
-            <Image
-              src={avatarUrl}
-              width={40}
-              height={40}
-              alt="avatar"
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full bg-[color:var(--color-fc-panel)]" />
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => setMenuOpen((open) => !open)}
+          className="flex items-center gap-2 rounded border border-white/15 px-2 py-1 hover:border-white/30"
+        >
+          <div className="relative w-10 h-10 rounded overflow-hidden bg-[color:var(--color-fc-panel)]">
+            {avatarUrl ? (
+              <Image
+                src={avatarUrl}
+                fill
+                sizes="40px"
+                alt="avatar"
+                className="object-cover object-top scale-[2.6] origin-top"
+                style={{ objectPosition: "center top" }}
+              />
+            ) : (
+              <div className="w-full h-full bg-[color:var(--color-fc-panel)]" />
+            )}
+          </div>
+          <ChevronDown size={16} className="text-white/60" />
+        </button>
+
+        {menuOpen ? (
+          <div className="absolute right-0 top-[calc(100%+10px)] z-30 min-w-[140px] border border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(18,10,26,0.98)_0%,rgba(7,3,12,0.98)_100%)] p-2 shadow-[0_18px_40px_rgba(0,0,0,0.45)]">
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              disabled={isLoggingOut}
+              className="w-full px-3 py-2 text-left text-[14px] uppercase text-white/85 hover:bg-white/5 disabled:opacity-50"
+              style={{ fontFamily: "var(--font-pixel)" }}
+            >
+              {isLoggingOut ? "Logging out..." : "Log out"}
+            </button>
+          </div>
+        ) : null}
       </div>
     </header>
   );

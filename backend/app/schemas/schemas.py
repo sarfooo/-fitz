@@ -222,8 +222,7 @@ class FitGarment(BaseModel):
 
 
 class FitRequest(BaseModel):
-    top: FitGarment
-    bottom: FitGarment
+    garments: list[FitGarment] = Field(min_length=1)
     fit_preference: FitPreference = "regular"
     image_size: str = "1024x1536"
     quality: str = "high"

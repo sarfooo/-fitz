@@ -9,7 +9,9 @@ HOUSE_STYLE = (
     "photorealistic fashion lookbook photograph, full body shot head to shoes, "
     "subject perfectly centered and facing the camera straight-on, arms relaxed at sides, "
     "neutral calm expression, natural realistic skin texture and hair detail, "
-    "pitch-black seamless studio backdrop with no visible floor line, "
+    "very dark near-black seamless studio backdrop with no visible floor line, "
+    "deep black charcoal environment with only a faint soft shadow halo behind the subject, "
+    "no gray wall, no bright gradient, no visible room edges, "
     "soft even key light with subtle rim light, crisp fabric texture, 50mm lens look, "
     "cohesive FitCheck editorial visual identity"
 )

@@ -35,9 +35,20 @@ export default async function DashboardPage() {
         .eq("user_id", user.id)
         .maybeSingle();
 
+      const metadataUsername =
+        typeof user.user_metadata?.username === "string" && user.user_metadata.username.trim()
+          ? user.user_metadata.username.trim()
+          : null;
+      const profileUsername =
+        typeof profile?.username === "string" && profile.username.trim()
+          ? profile.username.trim()
+          : null;
+      const effectiveProfileUsername =
+        profileUsername && !/^user_[0-9a-f]{8}$/i.test(profileUsername)
+          ? profileUsername
+          : metadataUsername ?? profileUsername;
       const username =
-        profile?.username ??
-        user.user_metadata?.username ??
+        effectiveProfileUsername ??
         user.email?.split("@")[0] ??
         "guest";
       const displayName =

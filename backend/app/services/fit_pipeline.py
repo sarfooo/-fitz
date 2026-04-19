@@ -1,8 +1,9 @@
 """End-to-end fit render pipeline used by POST /tryon/fit.
 
-Given two garment image URLs and a stored identity description, this pipeline:
+Given one or more garment image URLs and a stored identity description, this
+pipeline:
   1. Fetches and captions each garment with Gemini (description-bridge)
-  2. Builds the full try-on prompt (identity + top + bottom + house style)
+  2. Builds the full try-on prompt (identity + all selected garments)
   3. Renders a new image via gpt-image-1
 
 This mirrors scripts/gen_tryon.py but operates on URLs + a stored identity
@@ -32,14 +33,9 @@ GARMENT_INSTRUCTION = (
     "2-3 dense sentences, no person, no background, no guesses about brand."
 )
 
-FIXED_WARDROBE = (
-    "FIXED WARDROBE (do not vary, only the shirt and pants above are the "
-    "selected garments): plain matte-black low-top canvas sneakers with "
-    "white rubber soles and white flat laces, plain white ankle-length "
-    "socks barely visible. No jewelry, no necklace, no bracelet, no watch, "
-    "no rings, no earrings, no hat, no beanie, no sunglasses, no belt, no "
-    "suspenders, no jacket, no outerwear, no undershirt visible at collar, "
-    "no additional layers."
+UNSELECTED_GARMENT_RULES = (
+    "Only use the selected garments described below. Do not invent extra tops, "
+    "pants, skirts, jackets, shoes, bags, or accessories that were not selected."
 )
 
 
@@ -91,18 +87,23 @@ async def describe_garment(image_url: str, kind: str) -> str:
 def build_fit_prompt(
     *,
     identity: str,
-    shirt_desc: str,
-    pants_desc: str,
+    garment_descs: list[str],
 ) -> str:
-    """Concatenate identity + garments + fixed wardrobe + house style."""
+    """Concatenate identity + selected garments + house style."""
+    garment_lines = [
+        f"Selected garment {index + 1}: {desc}."
+        for index, desc in enumerate(garment_descs)
+    ]
     return " ".join(
         [
             f"Identity reference: {identity}",
-            "Render that same person wearing the following SELECTED GARMENTS:",
-            f"Top: {shirt_desc}.",
-            f"Bottom: {pants_desc}.",
-            FIXED_WARDROBE,
+            "Render that same person wearing all of the following selected garments together as one cohesive outfit:",
+            *garment_lines,
+            "Do not omit any selected garment. If any selected garment is footwear, a bag, or an accessory, place it naturally and correctly on the person.",
+            UNSELECTED_GARMENT_RULES,
             "preserve the described face, hair, skin tone, build, and proportions exactly.",
+            "Use the same dark FitCheck site backdrop: almost pure black, softly vignetted, "
+            "with only a very subtle shadow glow behind the body and no light gray studio wash.",
             HOUSE_STYLE + ".",
             NEGATIVE,
         ]

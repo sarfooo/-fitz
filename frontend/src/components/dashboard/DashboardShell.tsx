@@ -10,14 +10,9 @@ import { MarketplacePanel, type MarketplaceItem } from "@/components/dashboard/M
 import { TaskBar } from "@/components/dashboard/TaskBar";
 import { TopBar, type TopBarView } from "@/components/dashboard/TopBar";
 import { TryOnPanel } from "@/components/dashboard/TryOnPanel";
-import { type AvatarIdentity, fetchCurrentAvatar } from "@/lib/api/backend";
+import { type AvatarIdentity, type SavedOutfit, fetchCurrentAvatar } from "@/lib/api/backend";
 
-export type GarmentSlot = "top" | "bottom";
-
-export interface OutfitSlots {
-  top: MarketplaceItem | null;
-  bottom: MarketplaceItem | null;
-}
+export type WornItems = MarketplaceItem[];
 
 interface DashboardShellProps {
   user: {
@@ -28,32 +23,15 @@ interface DashboardShellProps {
   accessToken?: string | null;
 }
 
-function detectSlot(category: string | null | undefined): GarmentSlot | null {
-  if (!category) return null;
-  const value = category.toLowerCase();
-  if (
-    value.startsWith("tops_") ||
-    /\b(shirt|polo|tee|t-shirt|sweater|knit|hoodie|jacket|coat|blazer|top)\b/.test(value)
-  ) {
-    return "top";
-  }
-  if (
-    value.startsWith("bottoms_") ||
-    /\b(pants|jean|trouser|short|denim|cargo|slack|bottom)\b/.test(value)
-  ) {
-    return "bottom";
-  }
-  return null;
-}
-
 export function DashboardShell({ user, accessToken = null }: DashboardShellProps) {
   const [activeView, setActiveView] = useState<TopBarView>("home");
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
-  const [slots, setSlots] = useState<OutfitSlots>({ top: null, bottom: null });
+  const [wornItems, setWornItems] = useState<WornItems>([]);
   const [avatar, setAvatar] = useState<AvatarIdentity | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [lookbookRefresh, setLookbookRefresh] = useState(0);
   const [closetVersion, setClosetVersion] = useState(0);
+  const [outfitPreviewImage, setOutfitPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!accessToken) {
@@ -81,34 +59,29 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
     setSelectedItem(item);
   }, []);
 
-  const handleWearItem = useCallback((item: MarketplaceItem, requestedSlot: GarmentSlot | null) => {
-    const inferredSlot =
-      requestedSlot ??
-      detectSlot(item.category) ??
-      (item.id === slots.top?.id ? "top" : null) ??
-      (item.id === slots.bottom?.id ? "bottom" : null) ??
-      (slots.top ? "bottom" : "top");
+  const handleWearItem = useCallback((item: MarketplaceItem) => {
+    setWornItems((current) =>
+      current.some((existing) => existing.id === item.id)
+        ? current.filter((existing) => existing.id !== item.id)
+        : [...current, item]
+    );
+  }, []);
 
-    setSlots((current) => {
-      if (current[inferredSlot]?.id === item.id) {
-        return { ...current, [inferredSlot]: null };
-      }
-
-      const next = { ...current, [inferredSlot]: item };
-      const otherSlot: GarmentSlot = inferredSlot === "top" ? "bottom" : "top";
-      if (next[otherSlot]?.id === item.id) {
-        next[otherSlot] = null;
-      }
-      return next;
-    });
-  }, [slots.top, slots.bottom]);
-
-  const handleRemoveSlot = useCallback((slot: GarmentSlot) => {
-    setSlots((current) => ({ ...current, [slot]: null }));
+  const handleRemoveItem = useCallback((itemId: string) => {
+    setWornItems((current) => current.filter((item) => item.id !== itemId));
   }, []);
 
   const handleResetOutfit = useCallback(() => {
-    setSlots({ top: null, bottom: null });
+    setWornItems([]);
+    setOutfitPreviewImage(null);
+  }, []);
+
+  const handleClearPreviewImage = useCallback(() => {
+    setOutfitPreviewImage(null);
+  }, []);
+
+  const handleStageImageChange = useCallback((imageUrl: string | null) => {
+    setOutfitPreviewImage(imageUrl);
   }, []);
 
   const handleOpenSetup = useCallback(() => {
@@ -133,6 +106,24 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
 
   const handleClosetSelectItem = useCallback((item: MarketplaceItem) => {
     setSelectedItem(item);
+    setActiveView("home");
+  }, []);
+
+  const handleSelectOutfit = useCallback((outfit: SavedOutfit) => {
+    const restoredItems: MarketplaceItem[] = outfit.items.map((item) => ({
+      id: item.listing_id,
+      source: item.source.toUpperCase(),
+      name: item.item_name,
+      price: item.price,
+      category: item.category,
+      size: item.size,
+      imageUrl: item.image,
+      productUrl: item.product_url,
+    }));
+
+    setWornItems(restoredItems);
+    setSelectedItem(null);
+    setOutfitPreviewImage(outfit.cover_image ?? null);
     setActiveView("home");
   }, []);
 
@@ -179,11 +170,14 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
             onSelectItem={handleSelectItem}
           />
           <TryOnPanel
+            previewImageUrl={outfitPreviewImage}
             currentItem={selectedItem}
-            slots={slots}
+            wornItems={wornItems}
             onWearItem={handleWearItem}
-            onRemoveSlot={handleRemoveSlot}
+            onRemoveItem={handleRemoveItem}
             onResetOutfit={handleResetOutfit}
+            onClearPreviewImage={handleClearPreviewImage}
+            onStageImageChange={handleStageImageChange}
             accessToken={accessToken}
             avatarUrl={canvasAvatarUrl}
             avatarReady={avatar !== null}
@@ -206,7 +200,59 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
 
       {activeView === "lookbook" ? (
         <div className="p-4 flex-1 min-h-0 overflow-hidden">
-          <LookbookPanel accessToken={accessToken} refreshKey={lookbookRefresh} />
+          <LookbookPanel
+            accessToken={accessToken}
+            refreshKey={lookbookRefresh}
+            onSelectOutfit={handleSelectOutfit}
+          />
+        </div>
+      ) : null}
+
+      {activeView === "suggestions" ? (
+        <div className="p-4 flex-1 min-h-0 overflow-hidden">
+          <section className="y2k-window p-5 flex h-full flex-col gap-4 overflow-hidden">
+            <div className="flex items-center justify-between gap-4">
+              <h2
+                className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase"
+                style={{ fontFamily: "var(--font-pixel)" }}
+              >
+                Suggested Outfits
+              </h2>
+              <p className="text-sm uppercase text-white/45">
+                Community-inspired looks
+              </p>
+            </div>
+
+            <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 md:grid-cols-3">
+              {[
+                {
+                  title: "Late-night layers",
+                  note: "Baggy hoodie, washed denim, chunky sneakers.",
+                },
+                {
+                  title: "Downtown monochrome",
+                  note: "Heavy black outerwear with stacked basics.",
+                },
+                {
+                  title: "Archive grunge",
+                  note: "Distressed knit, faded jeans, worn-in boots.",
+                },
+              ].map((suggestion) => (
+                <div
+                  key={suggestion.title}
+                  className="flex flex-col justify-end rounded-sm border border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(15,9,22,0.94)_0%,rgba(7,4,12,0.98)_100%)] p-4"
+                >
+                  <div className="mb-16 aspect-[4/5] rounded-sm border border-white/10 bg-[radial-gradient(circle_at_50%_20%,rgba(255,255,255,0.05),rgba(0,0,0,0)_45%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))]" />
+                  <p className="text-[13px] uppercase text-white/90">{suggestion.title}</p>
+                  <p className="mt-2 text-sm leading-5 text-white/55">{suggestion.note}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/50">
+              This tab is ready for other-user outfit suggestions next.
+            </div>
+          </section>
         </div>
       ) : null}
 

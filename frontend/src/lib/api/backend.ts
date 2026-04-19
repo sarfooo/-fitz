@@ -47,6 +47,17 @@ export interface SavedOutfitsResponse {
   outfits: SavedOutfit[];
 }
 
+export interface AddSavedOutfitRequest {
+  name: string;
+  closet_item_ids: string[];
+  cover_image?: string | null;
+}
+
+export interface AddSavedOutfitResponse {
+  success: boolean;
+  outfit: SavedOutfit;
+}
+
 export interface AddClosetItemRequest {
   listing_id: string;
   item_name: string;
@@ -126,6 +137,20 @@ export async function fetchOutfits(accessToken: string) {
   return parseJson<SavedOutfitsResponse>(response);
 }
 
+export async function addOutfit(accessToken: string, payload: AddSavedOutfitRequest) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/outfits`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJson<AddSavedOutfitResponse>(response);
+}
+
 export async function addClosetItem(accessToken: string, payload: AddClosetItemRequest) {
   const baseUrl = getBackendBaseUrl();
   const response = await fetch(`${baseUrl}/closet`, {
@@ -158,8 +183,7 @@ export interface FitGarmentInput {
 }
 
 export interface FitRequestPayload {
-  top: FitGarmentInput;
-  bottom: FitGarmentInput;
+  garments: FitGarmentInput[];
   fit_preference?: "fitted" | "regular" | "oversized" | "baggy";
 }
 

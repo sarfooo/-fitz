@@ -375,23 +375,25 @@ async def _run_fit_job(
     render_id: str,
     user_id: str,
     identity: str,
-    top_url: str,
-    bottom_url: str,
+    garments: list[tuple[str, str]],
     image_size: str,
 ) -> None:
     """Background worker — identical recipe to scripts/gen_tryon.py.
 
-    1. Caption each garment with Gemini vision → shirt_desc + pants_desc.
-    2. Build prompt: identity + garment descs + FIXED_WARDROBE + HOUSE_STYLE + NEGATIVE.
+    1. Caption each garment with Gemini vision → garment descriptions.
+    2. Build prompt: identity + garment descs + HOUSE_STYLE + NEGATIVE.
     3. gpt-image-1 text-to-image at 1024x1536 quality=high.
     """
     try:
-        shirt_desc, pants_desc = await asyncio.gather(
-            describe_garment(top_url, kind="shirt/top"),
-            describe_garment(bottom_url, kind="pants/bottom"),
+        garment_descs = await asyncio.gather(
+            *[
+                describe_garment(image_url, kind=label)
+                for image_url, label in garments
+            ]
         )
         prompt = build_fit_prompt(
-            identity=identity, shirt_desc=shirt_desc, pants_desc=pants_desc
+            identity=identity,
+            garment_descs=list(garment_descs),
         )
         log.info("[tryon] fit prompt (render=%s): %s", render_id, prompt[:200])
         image = await render_fit_image(prompt, size="1024x1536")
@@ -427,7 +429,7 @@ async def generate_fit(
     The actual gpt-image-1 render runs in a background task. Client should poll
     ``GET /tryon/render/{render_id}`` until status becomes ``ready`` or ``failed``.
     """
-    log.info("[tryon] POST /fit user=%s top=%s bottom=%s", user_id, req.top.image_url, req.bottom.image_url)
+    log.info("[tryon] POST /fit user=%s garments=%d", user_id, len(req.garments))
     identity_row = load_latest_identity(user_id)
     if identity_row is None:
         raise HTTPException(
@@ -463,8 +465,13 @@ async def generate_fit(
         render_id=render_id,
         user_id=user_id,
         identity=identity,
-        top_url=req.top.image_url,
-        bottom_url=req.bottom.image_url,
+        garments=[
+            (
+                garment.image_url,
+                garment.name or f"garment {index + 1}",
+            )
+            for index, garment in enumerate(req.garments)
+        ],
         image_size=req.image_size,
     )
     log.info("[tryon] queued background render %s", render_id)

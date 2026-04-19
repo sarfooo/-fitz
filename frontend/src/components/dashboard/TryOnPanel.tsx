@@ -1,24 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, Check, PersonStanding, Shirt } from "lucide-react";
+import { Camera, FolderHeart, RotateCcw, Shirt } from "lucide-react";
 
-import type { GarmentSlot, OutfitSlots } from "@/components/dashboard/DashboardShell";
+import type { WornItems } from "@/components/dashboard/DashboardShell";
 import type { MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
 import {
   addClosetItem,
+  addOutfit,
   generateFit,
   getRenderStatus,
-  saveRenderToLookbook,
 } from "@/lib/api/backend";
 
 interface TryOnPanelProps {
   avatarUrl?: string | null;
+  previewImageUrl?: string | null;
   currentItem?: MarketplaceItem | null;
-  slots: OutfitSlots;
-  onWearItem: (item: MarketplaceItem, slot: GarmentSlot | null) => void;
-  onRemoveSlot: (slot: GarmentSlot) => void;
+  wornItems: WornItems;
+  onWearItem: (item: MarketplaceItem) => void;
+  onRemoveItem: (itemId: string) => void;
   onResetOutfit: () => void;
+  onClearPreviewImage?: () => void;
+  onStageImageChange?: (imageUrl: string | null) => void;
   accessToken?: string | null;
   avatarReady?: boolean;
   onRequestAvatarSetup?: () => void;
@@ -28,33 +31,16 @@ interface TryOnPanelProps {
 
 type Mode = "base" | "rendered";
 
-function inferSlot(item: MarketplaceItem | null | undefined): GarmentSlot | null {
-  const category = item?.category?.toLowerCase();
-  if (!category) {
-    return null;
-  }
-  if (
-    category.startsWith("tops_") ||
-    /\b(shirt|polo|tee|t-shirt|sweater|knit|hoodie|jacket|coat|blazer|top)\b/.test(category)
-  ) {
-    return "top";
-  }
-  if (
-    category.startsWith("bottoms_") ||
-    /\b(pants|jean|trouser|short|denim|cargo|slack|bottom)\b/.test(category)
-  ) {
-    return "bottom";
-  }
-  return null;
-}
-
 export function TryOnPanel({
   avatarUrl,
+  previewImageUrl,
   currentItem,
-  slots,
+  wornItems,
   onWearItem,
-  onRemoveSlot,
+  onRemoveItem,
   onResetOutfit,
+  onClearPreviewImage,
+  onStageImageChange,
   accessToken,
   avatarReady = true,
   onRequestAvatarSetup,
@@ -63,13 +49,16 @@ export function TryOnPanel({
 }: TryOnPanelProps) {
   const [mode, setMode] = useState<Mode>("base");
   const [renderedImage, setRenderedImage] = useState<string | null>(null);
-  const [lastRenderId, setLastRenderId] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [savingFit, setSavingFit] = useState(false);
-  const [savedFit, setSavedFit] = useState(false);
+  const [isSavingClothes, setIsSavingClothes] = useState(false);
+  const [isSavingOutfit, setIsSavingOutfit] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const pollAbortRef = useRef<{ cancelled: boolean } | null>(null);
+  const stageImage = renderedImage ?? previewImageUrl ?? avatarUrl ?? null;
+  const downloadableImage = stageImage;
 
   useEffect(() => {
     if (!isRendering) {
@@ -94,9 +83,20 @@ export function TryOnPanel({
     onResetOutfit();
     setMode("base");
     setRenderedImage(null);
-    setLastRenderId(null);
     setRenderError(null);
-    setSavedFit(false);
+    setSaveMessage(null);
+    setSaveError(null);
+    onStageImageChange?.(null);
+  }
+
+  function handleResetToBaseImage() {
+    setMode("base");
+    setRenderedImage(null);
+    setRenderError(null);
+    setSaveMessage(null);
+    setSaveError(null);
+    onClearPreviewImage?.();
+    onStageImageChange?.(null);
   }
 
   async function pollForRender(token: string, renderId: string) {
@@ -116,9 +116,8 @@ export function TryOnPanel({
         const status = await getRenderStatus(token, renderId);
         if (status.status === "ready" && status.image?.signed_url) {
           setRenderedImage(status.image.signed_url);
-          setLastRenderId(renderId);
-          setSavedFit(false);
           setMode("rendered");
+          onStageImageChange?.(status.image.signed_url);
           return;
         }
         if (status.status === "failed") {
@@ -136,12 +135,12 @@ export function TryOnPanel({
   async function handleRenderOutfit() {
     setRenderError(null);
 
-    if (!slots.top || !slots.bottom) {
-      setRenderError("Wear a top and a bottom before rendering.");
+    if (wornItems.length === 0) {
+      setRenderError("Wear at least one item before rendering.");
       return;
     }
-    if (!slots.top.imageUrl || !slots.bottom.imageUrl) {
-      setRenderError("Both worn items need an image before rendering.");
+    if (wornItems.some((item) => !item.imageUrl)) {
+      setRenderError("Every worn item needs an image before rendering.");
       return;
     }
     if (!accessToken) {
@@ -157,12 +156,15 @@ export function TryOnPanel({
     setIsRendering(true);
     setElapsedMs(0);
     setRenderedImage(null);
-    setSavedFit(false);
+    setSaveMessage(null);
+    setSaveError(null);
 
     try {
       const start = await generateFit(accessToken, {
-        top: { image_url: slots.top.imageUrl, name: slots.top.name },
-        bottom: { image_url: slots.bottom.imageUrl, name: slots.bottom.name },
+        garments: wornItems.map((item) => ({
+          image_url: item.imageUrl!,
+          name: item.name,
+        })),
       });
       await pollForRender(accessToken, start.render_id);
     } catch (err: unknown) {
@@ -176,26 +178,106 @@ export function TryOnPanel({
     }
   }
 
-  async function handleSaveFit() {
-    if (!lastRenderId || !accessToken || savingFit || savedFit) {
+  async function saveWornItemsToCloset() {
+    if (!accessToken) {
+      throw new Error("You need to be logged in to save clothes.");
+    }
+
+    if (wornItems.length === 0) {
+      throw new Error("Wear at least one item first.");
+    }
+
+    const savedItems = await Promise.all(
+      wornItems.map(async (item) => {
+        const response = await addClosetItem(accessToken, {
+          listing_id: item.id,
+          item_name: item.name,
+          price: item.price,
+          size: item.size ?? null,
+          image: item.imageUrl ?? null,
+          category: item.category ?? null,
+          source: item.source.toLowerCase(),
+          product_url: item.productUrl ?? null,
+        });
+        return response.item;
+      })
+    );
+
+    onClosetSaved?.();
+    return savedItems;
+  }
+
+  async function handleSaveClothes() {
+    if (isSavingClothes) {
       return;
     }
 
-    setSavingFit(true);
     try {
-      const name =
-        [slots.top?.name, slots.bottom?.name].filter(Boolean).join(" + ") || null;
-      const response = await saveRenderToLookbook(accessToken, lastRenderId, name);
-      if (response.success) {
-        setSavedFit(true);
-        onFitSaved?.();
-      } else {
-        setRenderError(response.error || "Failed to save outfit.");
-      }
+      setIsSavingClothes(true);
+      setSaveError(null);
+      setSaveMessage(null);
+      const savedItems = await saveWornItemsToCloset();
+      setSaveMessage(savedItems.length === 1 ? "Clothing item saved." : "Clothing items saved.");
     } catch (err: unknown) {
-      setRenderError(err instanceof Error ? err.message : "Failed to save outfit.");
+      setSaveError(err instanceof Error ? err.message : "Failed to save clothes.");
     } finally {
-      setSavingFit(false);
+      setIsSavingClothes(false);
+    }
+  }
+
+  async function handleSaveOutfit() {
+    if (!accessToken || isSavingOutfit) {
+      return;
+    }
+
+    try {
+      setIsSavingOutfit(true);
+      setSaveError(null);
+      setSaveMessage(null);
+
+      const savedItems = await saveWornItemsToCloset();
+      const outfitName =
+        wornItems.map((item) => item.name).join(" + ") || "Saved outfit";
+      const coverImage =
+        renderedImage ?? previewImageUrl ?? avatarUrl ?? savedItems[0]?.image ?? null;
+
+      await addOutfit(accessToken, {
+        name: outfitName,
+        closet_item_ids: savedItems.map((item) => item.id),
+        cover_image: coverImage,
+      });
+
+      setSaveMessage("Outfit saved.");
+      onFitSaved?.();
+    } catch (err: unknown) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save outfit.");
+    } finally {
+      setIsSavingOutfit(false);
+    }
+  }
+
+  async function handleDownloadCurrent() {
+    if (!downloadableImage) {
+      return;
+    }
+
+    try {
+      const response = await fetch(downloadableImage);
+      if (!response.ok) {
+        throw new Error("Failed to download image.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = mode === "rendered" ? "fitz-rendered-outfit.png" : "fitz-avatar.png";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (err: unknown) {
+      setRenderError(err instanceof Error ? err.message : "Failed to download image.");
     }
   }
 
@@ -222,19 +304,39 @@ export function TryOnPanel({
 
       <div className="flex-1 flex gap-5 overflow-hidden">
         <aside className="flex flex-col gap-5 pt-2 shrink-0">
-          <ToolButton icon={<PersonStanding size={22} />} label="Body" onClick={handleResetView} />
-          <ToolButton icon={<Shirt size={22} />} label="Closet" />
-          <ToolButton icon={<Camera size={22} />} label="Screenshot" />
-          {savedFit ? <ToolButton icon={<Check size={22} />} label="Saved" active /> : null}
+          <ToolButton
+            icon={<Shirt size={22} />}
+            label={isSavingClothes ? "Saving..." : "Save Clothes"}
+            onClick={() => void handleSaveClothes()}
+            disabled={isSavingClothes}
+          />
+          <ToolButton
+            icon={<FolderHeart size={22} />}
+            label={isSavingOutfit ? "Saving..." : "Save Outfit"}
+            onClick={() => void handleSaveOutfit()}
+            disabled={isSavingOutfit}
+          />
+          <ToolButton
+            icon={<Camera size={22} />}
+            label="Screenshot"
+            onClick={() => void handleDownloadCurrent()}
+            disabled={!downloadableImage}
+          />
+          <ToolButton
+            icon={<RotateCcw size={22} />}
+            label="Base Image"
+            onClick={handleResetToBaseImage}
+            disabled={mode === "base" && !renderedImage && !previewImageUrl}
+          />
         </aside>
 
         <div className="flex-1 relative flex items-end justify-center overflow-hidden rounded-lg bg-black/60 border border-[color:var(--color-fc-border)]">
           {mode === "rendered" && renderedImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={renderedImage} alt="rendered outfit" className="h-full w-auto object-contain" />
-          ) : avatarUrl ? (
+          ) : stageImage ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarUrl} alt="your avatar" className="h-full w-auto object-contain" />
+            <img src={stageImage} alt="your avatar" className="h-full w-auto object-contain" />
           ) : (
             <div className="h-full w-full flex flex-col items-center justify-center gap-3 p-6 text-center">
               <p className="text-white/60 text-sm">
@@ -262,6 +364,18 @@ export function TryOnPanel({
             </div>
           ) : null}
 
+          {!isRendering && saveError ? (
+            <div className="absolute inset-x-4 bottom-4 z-10 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+              {saveError}
+            </div>
+          ) : null}
+
+          {!isRendering && !saveError && saveMessage ? (
+            <div className="absolute inset-x-4 bottom-4 z-10 rounded-lg border border-[color:var(--color-fc-border)] bg-black/45 px-3 py-2 text-sm text-white/80">
+              {saveMessage}
+            </div>
+          ) : null}
+
           <div
             className={`absolute right-5 top-5 bottom-5 w-[18.5rem] max-w-[36%] flex items-start transition-all duration-300 ease-out ${
               currentItem
@@ -272,32 +386,20 @@ export function TryOnPanel({
           >
             <CurrentItemCard
               item={currentItem}
-              slots={slots}
+              wornItems={wornItems}
               accessToken={accessToken ?? null}
               onWearItem={onWearItem}
               onClosetSaved={onClosetSaved}
             />
           </div>
-
-          <div
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 w-64 h-10 rounded-full pointer-events-none"
-            style={{
-              background: "radial-gradient(ellipse, rgba(201,64,255,0.55) 0%, rgba(201,64,255,0) 70%)",
-              filter: "blur(6px)",
-            }}
-          />
         </div>
 
         <aside className="w-72 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
           <WearingNowPanel
-            slots={slots}
+            wornItems={wornItems}
             isRendering={isRendering}
-            onRemoveSlot={onRemoveSlot}
+            onRemoveItem={onRemoveItem}
             onRender={handleRenderOutfit}
-            onSaveFit={handleSaveFit}
-            saveVisible={Boolean(renderedImage && lastRenderId)}
-            savingFit={savingFit}
-            savedFit={savedFit}
           />
         </aside>
       </div>
@@ -365,17 +467,22 @@ function ToolButton({
   label,
   onClick,
   active = false,
+  disabled = false,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick?: () => void;
   active?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col items-center gap-1 ${active ? "text-white" : "text-white/80 hover:text-white"} transition-colors`}
+      disabled={disabled}
+      className={`flex flex-col items-center gap-1 transition-colors ${
+        active ? "text-white" : "text-white/80 hover:text-white"
+      } disabled:opacity-40 disabled:cursor-not-allowed`}
     >
       <span
         className={`w-12 h-12 flex items-center justify-center border bg-[color:var(--color-fc-panel)] ${
@@ -396,15 +503,15 @@ function ToolButton({
 
 function CurrentItemCard({
   item,
-  slots,
+  wornItems,
   accessToken,
   onWearItem,
   onClosetSaved,
 }: {
   item?: MarketplaceItem | null;
-  slots: OutfitSlots;
+  wornItems: WornItems;
   accessToken: string | null;
-  onWearItem: (item: MarketplaceItem, slot: GarmentSlot | null) => void;
+  onWearItem: (item: MarketplaceItem) => void;
   onClosetSaved?: () => void;
 }) {
   const [isSavingToCloset, setIsSavingToCloset] = useState(false);
@@ -415,8 +522,9 @@ function CurrentItemCard({
   const normalizedSize = item?.size
     ? item.size.trim().split(/\s+/).map((part) => part.toUpperCase()).join(" ")
     : "--";
-  const inferredSlot = inferSlot(item);
-  const isWearingSelectedItem = Boolean(item && (slots.top?.id === item.id || slots.bottom?.id === item.id));
+  const isWearingSelectedItem = Boolean(
+    item && wornItems.some((wornItem) => wornItem.id === item.id)
+  );
 
   async function handleAddToCloset() {
     if (!item || isSavingToCloset) {
@@ -496,7 +604,7 @@ function CurrentItemCard({
         </button>
         <button
           type="button"
-          onClick={() => item && onWearItem(item, inferredSlot)}
+          onClick={() => item && onWearItem(item)}
           disabled={!hasSelectedItem}
           className="w-full border border-white/22 bg-transparent px-4 py-3 text-[1.05rem] uppercase text-white/88 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ fontFamily: "var(--font-pixel)" }}
@@ -510,31 +618,18 @@ function CurrentItemCard({
 }
 
 function WearingNowPanel({
-  slots,
+  wornItems,
   isRendering,
-  onRemoveSlot,
+  onRemoveItem,
   onRender,
-  onSaveFit,
-  saveVisible,
-  savingFit,
-  savedFit,
 }: {
-  slots: OutfitSlots;
+  wornItems: WornItems;
   isRendering: boolean;
-  onRemoveSlot: (slot: GarmentSlot) => void;
+  onRemoveItem: (itemId: string) => void;
   onRender: () => void;
-  onSaveFit: () => void;
-  saveVisible: boolean;
-  savingFit: boolean;
-  savedFit: boolean;
 }) {
-  const wornEntries = [
-    { slot: "top" as GarmentSlot, item: slots.top },
-    { slot: "bottom" as GarmentSlot, item: slots.bottom },
-  ].filter((entry) => Boolean(entry.item));
-
   return (
-    <div className="liquid-glass overflow-hidden rounded-lg p-4 flex flex-col gap-3">
+    <div className="liquid-glass overflow-hidden rounded-lg p-4 flex h-full min-h-0 flex-col gap-3">
       <div className="flex items-center justify-between">
         <p
           className="text-[18px] tracking-[0.08em] neon-pink uppercase"
@@ -542,19 +637,19 @@ function WearingNowPanel({
         >
           Wearing Now
         </p>
-        <p className="text-[0.9rem] uppercase text-white/50">{wornEntries.length} items</p>
+        <p className="text-[0.9rem] uppercase text-white/50">{wornItems.length} items</p>
       </div>
 
-      {wornEntries.length === 0 ? (
+      {wornItems.length === 0 ? (
         <p className="text-[0.95rem] leading-5 text-white/55">
           Add pieces from the marketplace and they&apos;ll stack here.
         </p>
       ) : (
-        <div className="flex flex-col gap-3 max-h-[19rem] overflow-y-auto pr-1">
-          {wornEntries.map(({ slot, item }) =>
-            item ? (
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+          <div className="flex flex-col gap-3">
+            {wornItems.map((item, index) => (
               <div
-                key={`${slot}-${item.id}`}
+                key={item.id}
                 className="border border-[color:var(--color-fc-border)] bg-black/20 p-2 rounded-sm flex gap-3 items-start"
                 data-selection-anchor="true"
               >
@@ -569,7 +664,9 @@ function WearingNowPanel({
                   ) : null}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[0.9rem] uppercase text-white/50">{slot}</p>
+                  <p className="text-[0.9rem] uppercase text-white/50">
+                    {item.category || `item ${index + 1}`}
+                  </p>
                   <p className="text-[1rem] leading-5 text-white/85 break-words">{item.name}</p>
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <span className="text-[0.9rem] text-white/55">
@@ -577,7 +674,7 @@ function WearingNowPanel({
                     </span>
                     <button
                       type="button"
-                      onClick={() => onRemoveSlot(slot)}
+                      onClick={() => onRemoveItem(item.id)}
                       className="pill-btn-ghost px-3 py-1 text-[0.8rem]"
                     >
                       Remove
@@ -585,12 +682,12 @@ function WearingNowPanel({
                   </div>
                 </div>
               </div>
-            ) : null
-          )}
+            ))}
+          </div>
         </div>
       )}
 
-      {wornEntries.length > 0 ? (
+      {wornItems.length > 0 ? (
         <button
           type="button"
           onClick={onRender}
@@ -599,18 +696,6 @@ function WearingNowPanel({
           style={{ fontFamily: "var(--font-pixel)" }}
         >
           {isRendering ? "Rendering..." : "Render outfit"}
-        </button>
-      ) : null}
-
-      {saveVisible ? (
-        <button
-          type="button"
-          onClick={onSaveFit}
-          disabled={savingFit || savedFit}
-          className="w-full border border-white/22 bg-transparent px-4 py-3 text-[1.05rem] uppercase text-white/88 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ fontFamily: "var(--font-pixel)" }}
-        >
-          {savingFit ? "Saving..." : savedFit ? "Saved to outfits" : "Save to outfits"}
         </button>
       ) : null}
     </div>
