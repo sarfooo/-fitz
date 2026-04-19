@@ -26,17 +26,43 @@ body {
 
 body {
   background:
-    radial-gradient(
-      ellipse at 20% 0%,
-      rgba(201, 64, 255, 0.15) 0%,
-      transparent 45%
-    ),
-    radial-gradient(
-      ellipse at 80% 100%,
-      rgba(255, 38, 185, 0.1) 0%,
-      transparent 45%
-    ),
-    #050008;
+    radial-gradient(circle at 50% 6%, rgba(128, 73, 170, 0.28) 0%, rgba(128, 73, 170, 0.1) 18%, transparent 42%),
+    radial-gradient(circle at 52% 54%, rgba(186, 109, 255, 0.1) 0%, transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0px, rgba(255, 255, 255, 0) 2px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0px, rgba(255, 255, 255, 0) 1px),
+    linear-gradient(180deg, #060608 0%, #050507 34%, #030305 100%);
+  background-size: auto, auto, 100% 4px, 4px 100%, auto;
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.035) 0%, transparent 18%),
+    radial-gradient(circle at 82% 16%, rgba(255, 255, 255, 0.025) 0%, transparent 14%),
+    radial-gradient(circle at 76% 78%, rgba(201, 64, 255, 0.08) 0%, transparent 20%),
+    radial-gradient(circle at 26% 72%, rgba(255, 38, 185, 0.05) 0%, transparent 16%);
+  mix-blend-mode: screen;
+  opacity: 0.9;
+  z-index: 0;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 14%, transparent 86%, rgba(182, 126, 255, 0.06) 100%);
+  box-shadow: inset 0 0 160px rgba(0, 0, 0, 0.7);
+  z-index: 0;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
 }
 
 @layer components {
@@ -89,9 +115,9 @@ body {
   }
 
   .neon-pink {
-    color: #ff26b9;
-    text-shadow: 0 0 6px rgba(255, 38, 185, 0.75),
-      0 0 18px rgba(255, 38, 185, 0.35);
+    color: #e77fe4;
+    text-shadow: 0 0 6px rgba(231, 127, 228, 0.55),
+      0 0 16px rgba(231, 127, 228, 0.22);
   }
 
   .neon-lime {
@@ -121,15 +147,20 @@ body {
 
   /* Y2K window chrome (used for the three main panels) */
   .y2k-window {
-    border: 1px solid rgba(201, 64, 255, 0.35);
+    border: 1px solid rgba(140, 116, 173, 0.34);
     background: linear-gradient(
       180deg,
-      rgba(30, 12, 42, 0.92) 0%,
-      rgba(14, 6, 22, 0.92) 100%
+      rgba(18, 18, 22, 0.98) 0%,
+      rgba(11, 11, 15, 0.99) 18%,
+      rgba(7, 7, 10, 0.99) 100%
     );
     border-radius: 8px;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-      0 0 40px rgba(201, 64, 255, 0.12);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.045) inset,
+      0 1px 0 rgba(255, 255, 255, 0.06) inset,
+      0 0 0 1px rgba(120, 84, 170, 0.18),
+      0 0 26px rgba(173, 91, 255, 0.1),
+      0 16px 36px rgba(0, 0, 0, 0.45);
   }
 
   .y2k-divider {

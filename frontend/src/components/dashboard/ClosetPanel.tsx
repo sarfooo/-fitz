@@ -105,14 +105,14 @@ export function ClosetPanel({
     <section className="y2k-window p-5 flex flex-col gap-4 h-full overflow-hidden">
       <div className="flex items-center justify-between">
         <h2
-          className="neon-pink text-sm tracking-[0.3em] uppercase"
-          style={{ fontFamily: "var(--font-mono)" }}
+          className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase"
+          style={{ fontFamily: "var(--font-pixel)" }}
         >
           My Closet
         </h2>
         <p
-          className="text-[10px] tracking-[0.25em] text-white/50 uppercase"
-          style={{ fontFamily: "var(--font-mono)" }}
+          className="text-[14px] tracking-[0.08em] text-white/50 uppercase"
+          style={{ fontFamily: "var(--font-pixel)" }}
         >
           {loading ? "Loading..." : `${closetItems.length} items`}
         </p>
@@ -173,13 +173,13 @@ export function ClosetPanel({
                   </button>
                 </div>
                 <div className="pt-2 space-y-1">
-                  <p className="text-[10px] tracking-[0.2em] text-white/45 uppercase">
+                  <p className="text-[14px] tracking-[0.08em] text-white/45 uppercase">
                     {item.source}
                   </p>
-                  <p className="text-xs text-white/85 leading-snug line-clamp-2">
+                  <p className="text-[18px] leading-tight text-white/85 line-clamp-2">
                     {item.itemName}
                   </p>
-                  <div className="flex items-center justify-between gap-2 text-[10px] uppercase text-white/55">
+                  <div className="flex items-center justify-between gap-2 text-[14px] uppercase text-white/55">
                     <span>{item.price != null ? `$${item.price}` : "--"}</span>
                     <span>{item.size ?? "--"}</span>
                   </div>

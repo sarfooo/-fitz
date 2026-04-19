@@ -1,35 +1,33 @@
 "use client";
 
-import { Minus, Square, X } from "lucide-react";
 import Image from "next/image";
 
 interface TopBarProps {
   username: string;
   displayName?: string | null;
   avatarUrl?: string;
-  active?: "home" | "browse" | "closet" | "lookbook";
+  active?: "home" | "closet" | "lookbook";
   onNavigate?: (view: NonNullable<TopBarProps["active"]>) => void;
 }
 
 const NAV_ITEMS: Array<{ id: TopBarProps["active"]; label: string }> = [
   { id: "home", label: "HOME" },
-  { id: "browse", label: "BROWSE" },
   { id: "closet", label: "CLOSET" },
-  { id: "lookbook", label: "LOOKBOOK" },
+  { id: "lookbook", label: "OUTFITS" },
 ];
 
 export function TopBar({
   username,
   displayName,
   avatarUrl,
-  active = "browse",
+  active = "home",
   onNavigate,
 }: TopBarProps) {
   const primaryLabel = displayName?.trim() || username;
 
   return (
-    <header className="flex items-center justify-between px-6 py-3 border-b border-[color:var(--color-fc-border)] bg-black/70 backdrop-blur">
-      <div className="flex items-baseline gap-4">
+    <header className="flex items-center justify-between px-6 py-3 border-b border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(10,4,16,0.98)_0%,rgba(5,0,8,0.96)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_32px_rgba(0,0,0,0.38)] backdrop-blur">
+      <div className="flex flex-col items-center gap-1">
         <h1
           className="chrome-text text-5xl md:text-6xl font-black tracking-tighter leading-none"
           style={{ fontFamily: "var(--font-retro)" }}
@@ -37,8 +35,8 @@ export function TopBar({
           FITZ
         </h1>
         <p
-          className="text-[10px] md:text-xs tracking-[0.3em] text-[color:var(--color-fc-ice)]/60 uppercase"
-          style={{ fontFamily: "var(--font-mono)" }}
+          className="text-center text-[15px] md:text-[16px] tracking-[0.12em] text-white uppercase"
+          style={{ fontFamily: "var(--font-pixel)" }}
         >
           Y2K Virtual Try-On
         </p>
@@ -52,14 +50,14 @@ export function TopBar({
               key={item.id}
               type="button"
               onClick={() => onNavigate?.(item.id)}
-              className={`text-sm tracking-[0.25em] font-semibold transition-colors ${
+              className={`inline-flex items-center justify-center text-[17px] md:text-[18px] leading-none tracking-[0.02em] uppercase transition-colors ${
                 isActive
-                  ? "neon-pink px-3 py-1 border border-[color:var(--color-fc-hot)] rounded"
-                  : "text-white/80 hover:text-white"
+                  ? "h-[34px] min-w-[94px] px-4 border border-[#ff8ce3] bg-[linear-gradient(180deg,rgba(150,74,140,0.82)_0%,rgba(112,52,110,0.86)_100%)] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08),0_0_0_1px_rgba(255,38,185,0.22)]"
+                  : "px-0 text-[#bbb2bb] hover:text-white"
               }`}
-              style={{ fontFamily: "var(--font-mono)" }}
+              style={{ fontFamily: "var(--font-pixel)", borderRadius: isActive ? "2px" : "0px" }}
             >
-              {isActive ? `[ ${item.label} ]` : item.label}
+              {item.label}
             </button>
           );
         })}
@@ -67,8 +65,18 @@ export function TopBar({
 
       <div className="flex items-center gap-3">
         <div className="hidden sm:block text-right leading-tight">
-          <p className="text-[10px] uppercase tracking-widest text-white/50">welcome back,</p>
-          <p className="text-sm font-semibold neon-pink">{primaryLabel}</p>
+          <p
+            className="text-[16px] text-white/55"
+            style={{ fontFamily: "var(--font-pixel)" }}
+          >
+            welcome back,
+          </p>
+          <p
+            className="text-[22px] leading-none text-white"
+            style={{ fontFamily: "var(--font-pixel)" }}
+          >
+            {primaryLabel}
+          </p>
         </div>
         <div className="w-10 h-10 rounded border border-[color:var(--color-fc-neon)]/60 overflow-hidden">
           {avatarUrl ? (
@@ -83,23 +91,7 @@ export function TopBar({
             <div className="w-full h-full bg-[color:var(--color-fc-panel)]" />
           )}
         </div>
-        <div className="hidden lg:flex items-center gap-1 ml-2">
-          <WindowButton icon={<Minus size={12} />} />
-          <WindowButton icon={<Square size={10} />} />
-          <WindowButton icon={<X size={12} />} />
-        </div>
       </div>
     </header>
-  );
-}
-
-function WindowButton({ icon }: { icon: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      className="w-6 h-6 flex items-center justify-center border border-white/30 bg-[color:var(--color-fc-panel)] text-white/80 hover:text-white hover:border-white/50"
-    >
-      {icon}
-    </button>
   );
 }

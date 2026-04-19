@@ -33,7 +33,7 @@ function mapBrowseItem(item: BrowseItem): MarketplaceItem {
 
 interface MarketplacePanelProps {
   selectedItemId?: string | null;
-  onSelectItem?: (item: MarketplaceItem) => void;
+  onSelectItem?: (item: MarketplaceItem | null) => void;
 }
 
 export function MarketplacePanel({
@@ -70,8 +70,11 @@ export function MarketplacePanel({
         if (!cancelled) {
           const nextItems = data.items.map(mapBrowseItem);
           setItems(nextItems);
-          if (nextItems.length > 0 && !selectedItemId) {
-            onSelectItem?.(nextItems[0]);
+          if (
+            selectedItemId &&
+            !nextItems.some((item) => item.id === selectedItemId)
+          ) {
+            onSelectItem?.(null);
           }
         }
       } catch (err: unknown) {
@@ -103,8 +106,8 @@ export function MarketplacePanel({
   return (
     <section className="y2k-window p-5 flex flex-col gap-4 h-full overflow-hidden">
       <h2
-        className="neon-pink text-sm tracking-[0.3em] uppercase"
-        style={{ fontFamily: "var(--font-mono)" }}
+        className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase"
+        style={{ fontFamily: "var(--font-pixel)" }}
       >
         Marketplace
       </h2>
@@ -116,7 +119,7 @@ export function MarketplacePanel({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search for pieces..."
-            className="flex-1 bg-transparent text-sm placeholder:text-white/40 focus:outline-none"
+            className="flex-1 bg-transparent text-[18px] placeholder:text-white/40 focus:outline-none"
           />
         </div>
         <button type="submit" className="pill-btn w-full shrink-0" disabled={loading}>
@@ -130,11 +133,11 @@ export function MarketplacePanel({
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between text-[10px] tracking-[0.2em] uppercase text-white/50">
-        <span style={{ fontFamily: "var(--font-mono)" }}>
+      <div className="flex items-center justify-between text-[14px] tracking-[0.1em] uppercase text-white/50">
+        <span style={{ fontFamily: "var(--font-pixel)" }}>
           {loading ? "Loading results..." : `${items.length} items`}
         </span>
-        <span style={{ fontFamily: "var(--font-mono)" }}>
+        <span style={{ fontFamily: "var(--font-pixel)" }}>
           Page {page + 1}
         </span>
       </div>
@@ -145,7 +148,7 @@ export function MarketplacePanel({
             key={item.id}
             item={item}
             isSelected={item.id === selectedItemId}
-            onSelect={() => onSelectItem?.(item)}
+            onSelect={() => onSelectItem?.(item.id === selectedItemId ? null : item)}
           />
         ))}
         {!loading && !error && items.length === 0 ? (
@@ -156,7 +159,7 @@ export function MarketplacePanel({
       </div>
 
       <div className="flex items-center justify-between pt-1">
-        <p className="text-[10px] tracking-[0.2em] text-white/50 uppercase max-w-[50%] truncate" style={{ fontFamily: "var(--font-mono)" }}>
+        <p className="text-[14px] tracking-[0.08em] text-white/50 uppercase max-w-[50%] truncate" style={{ fontFamily: "var(--font-pixel)" }}>
           {submittedQuery ? `Results for ${submittedQuery}` : "Search Grailed"}
         </p>
         <div className="flex items-center gap-2">
@@ -193,7 +196,12 @@ function ItemCard({
 }) {
   const [saved, setSaved] = useState(false);
   return (
-    <button type="button" onClick={onSelect} className="text-left group">
+    <button
+      type="button"
+      onClick={onSelect}
+      className="text-left group"
+      data-selection-anchor="true"
+    >
       <div
         className={`relative aspect-square bg-white/5 border overflow-hidden rounded-sm ${
           isSelected
@@ -226,15 +234,20 @@ function ItemCard({
         </button>
       </div>
       <div className="pt-2">
-        <p className="text-[11px] font-semibold leading-snug neon-pink line-clamp-1">{item.name}</p>
+        <p
+          className="text-[20px] leading-none neon-pink line-clamp-1"
+          style={{ fontFamily: "var(--font-pixel)" }}
+        >
+          {item.name}
+        </p>
         {item.category ? (
-          <p className="text-[10px] text-white/55 uppercase tracking-[0.16em] mt-1 line-clamp-1">{item.category}</p>
+          <p className="text-[14px] text-white/55 uppercase tracking-[0.08em] mt-1 line-clamp-1">{item.category}</p>
         ) : null}
         <div className="mt-1 flex items-center justify-between gap-2">
-          <p className="text-sm text-white/90">
+          <p className="text-[22px] leading-none text-white/90">
             {item.price != null ? `$${item.price}` : "--"}
           </p>
-          {item.size ? <p className="text-[10px] text-white/50 uppercase">Size {item.size}</p> : null}
+          {item.size ? <p className="text-[14px] text-white/50 uppercase">Size {item.size}</p> : null}
         </div>
         {item.productUrl ? (
           <a
@@ -242,8 +255,8 @@ function ItemCard({
             target="_blank"
             rel="noreferrer"
             onClick={(event) => event.stopPropagation()}
-            className="mt-2 inline-flex text-[10px] tracking-[0.18em] uppercase text-white/55 hover:neon-pink"
-            style={{ fontFamily: "var(--font-mono)" }}
+            className="mt-2 inline-flex text-[14px] tracking-[0.08em] uppercase text-white/55 hover:neon-pink"
+            style={{ fontFamily: "var(--font-pixel)" }}
           >
             View
           </a>

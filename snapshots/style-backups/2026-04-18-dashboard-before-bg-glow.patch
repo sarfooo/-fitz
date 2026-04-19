@@ -1,0 +1,856 @@
+diff --git a/frontend/src/components/dashboard/ClosetPanel.tsx b/frontend/src/components/dashboard/ClosetPanel.tsx
+index 08c6f03..38e5fec 100644
+--- a/frontend/src/components/dashboard/ClosetPanel.tsx
++++ b/frontend/src/components/dashboard/ClosetPanel.tsx
+@@ -105,14 +105,14 @@ export function ClosetPanel({
+     <section className="y2k-window p-5 flex flex-col gap-4 h-full overflow-hidden">
+       <div className="flex items-center justify-between">
+         <h2
+-          className="neon-pink text-sm tracking-[0.3em] uppercase"
+-          style={{ fontFamily: "var(--font-mono)" }}
++          className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase"
++          style={{ fontFamily: "var(--font-pixel)" }}
+         >
+           My Closet
+         </h2>
+         <p
+-          className="text-[10px] tracking-[0.25em] text-white/50 uppercase"
+-          style={{ fontFamily: "var(--font-mono)" }}
++          className="text-[14px] tracking-[0.08em] text-white/50 uppercase"
++          style={{ fontFamily: "var(--font-pixel)" }}
+         >
+           {loading ? "Loading..." : `${closetItems.length} items`}
+         </p>
+@@ -173,13 +173,13 @@ export function ClosetPanel({
+                   </button>
+                 </div>
+                 <div className="pt-2 space-y-1">
+-                  <p className="text-[10px] tracking-[0.2em] text-white/45 uppercase">
++                  <p className="text-[14px] tracking-[0.08em] text-white/45 uppercase">
+                     {item.source}
+                   </p>
+-                  <p className="text-xs text-white/85 leading-snug line-clamp-2">
++                  <p className="text-[18px] leading-tight text-white/85 line-clamp-2">
+                     {item.itemName}
+                   </p>
+-                  <div className="flex items-center justify-between gap-2 text-[10px] uppercase text-white/55">
++                  <div className="flex items-center justify-between gap-2 text-[14px] uppercase text-white/55">
+                     <span>{item.price != null ? `$${item.price}` : "--"}</span>
+                     <span>{item.size ?? "--"}</span>
+                   </div>
+diff --git a/frontend/src/components/dashboard/DashboardShell.tsx b/frontend/src/components/dashboard/DashboardShell.tsx
+index de7734e..18cc63f 100644
+--- a/frontend/src/components/dashboard/DashboardShell.tsx
++++ b/frontend/src/components/dashboard/DashboardShell.tsx
+@@ -1,5 +1,6 @@
+ "use client";
+ 
++import type { MouseEvent } from "react";
+ import { useCallback, useState } from "react";
+ 
+ import { ClosetPanel } from "@/components/dashboard/ClosetPanel";
+@@ -20,25 +21,54 @@ interface DashboardShellProps {
+ export function DashboardShell({ user, accessToken = null }: DashboardShellProps) {
+   const [activeView, setActiveView] = useState<"home" | "browse" | "closet" | "lookbook">("browse");
+   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
+-  const [wornItem, setWornItem] = useState<MarketplaceItem | null>(null);
++  const [wornItems, setWornItems] = useState<MarketplaceItem[]>([]);
+   const [closetVersion, setClosetVersion] = useState(0);
+-  const handleSelectItem = useCallback((item: MarketplaceItem) => {
++  const handleSelectItem = useCallback((item: MarketplaceItem | null) => {
+     setSelectedItem(item);
+   }, []);
+   const handleWearItem = useCallback((item: MarketplaceItem | null) => {
+-    setWornItem(item);
++    if (!item) {
++      return;
++    }
++    setWornItems((current) =>
++      current.some((entry) => entry.id === item.id)
++        ? current.filter((entry) => entry.id !== item.id)
++        : [...current, item]
++    );
+   }, []);
+   const handleClosetSaved = useCallback(() => {
+     setClosetVersion((current) => current + 1);
+-    setActiveView("closet");
+   }, []);
+   const handleClosetSelectItem = useCallback((item: MarketplaceItem) => {
+     setSelectedItem(item);
+     setActiveView("browse");
+   }, []);
++  const handleBrowseClick = useCallback(
++    (event: MouseEvent<HTMLElement>) => {
++      if (activeView !== "browse" || !selectedItem) {
++        return;
++      }
++
++      const target = event.target;
++      if (!(target instanceof HTMLElement)) {
++        return;
++      }
++
++      if (target.closest("[data-selection-anchor='true']")) {
++        return;
++      }
++
++      setSelectedItem(null);
++    },
++    [activeView, selectedItem]
++  );
+ 
+   return (
+-    <main className="flex flex-col h-screen overflow-hidden">
++    <main
++      className="flex flex-col h-screen overflow-hidden"
++      style={{ fontFamily: "var(--font-pixel)" }}
++      onClick={handleBrowseClick}
++    >
+       <TopBar
+         username={user.username}
+         displayName={user.displayName}
+@@ -52,10 +82,12 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
+           <MarketplacePanel selectedItemId={selectedItem?.id ?? null} onSelectItem={handleSelectItem} />
+           <TryOnPanel
+             currentItem={selectedItem}
+-            wornItem={wornItem}
+-            onWearItem={handleWearItem}
++            wornItems={wornItems}
++            onToggleWearItem={handleWearItem}
+             accessToken={accessToken}
+             onClosetSaved={handleClosetSaved}
++            closetVersion={closetVersion}
++            onSelectClosetItem={handleSelectItem}
+           />
+         </div>
+       ) : null}
+@@ -73,7 +105,7 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
+       {activeView === "home" || activeView === "lookbook" ? (
+         <div className="p-4 flex-1 min-h-0 overflow-hidden">
+           <section className="y2k-window h-full flex items-center justify-center px-6 text-center text-white/55">
+-            <p style={{ fontFamily: "var(--font-mono)" }}>
++            <p style={{ fontFamily: "var(--font-pixel)" }}>
+               {activeView === "home"
+                 ? "Home view is not wired yet. Browse and Closet are active."
+                 : "Lookbook view is not wired yet. Browse and Closet are active."}
+diff --git a/frontend/src/components/dashboard/FitDetailsStrip.tsx b/frontend/src/components/dashboard/FitDetailsStrip.tsx
+index cfa9655..0e6592f 100644
+--- a/frontend/src/components/dashboard/FitDetailsStrip.tsx
++++ b/frontend/src/components/dashboard/FitDetailsStrip.tsx
+@@ -24,8 +24,8 @@ export function FitDetailsStrip({
+       {/* Polaroid detail shots */}
+       <div className="flex items-center justify-center gap-5">
+         <p
+-          className="neon-pink text-sm tracking-[0.3em] uppercase self-start mt-2"
+-          style={{ fontFamily: "var(--font-mono)" }}
++          className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase self-start mt-2"
++          style={{ fontFamily: "var(--font-pixel)" }}
+         >
+           Fit Details
+         </p>
+@@ -36,8 +36,8 @@ export function FitDetailsStrip({
+       {/* Fit match */}
+       <div className="y2k-window p-4 flex flex-col gap-2">
+         <p
+-          className="neon-pink text-xs tracking-[0.3em] uppercase"
+-          style={{ fontFamily: "var(--font-mono)" }}
++          className="neon-pink text-[22px] leading-none tracking-[0.12em] uppercase"
++          style={{ fontFamily: "var(--font-pixel)" }}
+         >
+           Fit Match
+         </p>
+@@ -47,7 +47,7 @@ export function FitDetailsStrip({
+         >
+           {matchScore}%
+         </p>
+-        <p className="text-[10px] tracking-[0.25em] text-white/60 uppercase">
++        <p className="text-[14px] tracking-[0.08em] text-white/60 uppercase">
+           This look hits.
+         </p>
+         <div className="pixel-bar mt-1">
+diff --git a/frontend/src/components/dashboard/MarketplacePanel.tsx b/frontend/src/components/dashboard/MarketplacePanel.tsx
+index 5cf0b37..b198be8 100644
+--- a/frontend/src/components/dashboard/MarketplacePanel.tsx
++++ b/frontend/src/components/dashboard/MarketplacePanel.tsx
+@@ -33,7 +33,7 @@ function mapBrowseItem(item: BrowseItem): MarketplaceItem {
+ 
+ interface MarketplacePanelProps {
+   selectedItemId?: string | null;
+-  onSelectItem?: (item: MarketplaceItem) => void;
++  onSelectItem?: (item: MarketplaceItem | null) => void;
+ }
+ 
+ export function MarketplacePanel({
+@@ -70,8 +70,11 @@ export function MarketplacePanel({
+         if (!cancelled) {
+           const nextItems = data.items.map(mapBrowseItem);
+           setItems(nextItems);
+-          if (nextItems.length > 0 && !selectedItemId) {
+-            onSelectItem?.(nextItems[0]);
++          if (
++            selectedItemId &&
++            !nextItems.some((item) => item.id === selectedItemId)
++          ) {
++            onSelectItem?.(null);
+           }
+         }
+       } catch (err: unknown) {
+@@ -103,8 +106,8 @@ export function MarketplacePanel({
+   return (
+     <section className="y2k-window p-5 flex flex-col gap-4 h-full overflow-hidden">
+       <h2
+-        className="neon-pink text-sm tracking-[0.3em] uppercase"
+-        style={{ fontFamily: "var(--font-mono)" }}
++        className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase"
++        style={{ fontFamily: "var(--font-pixel)" }}
+       >
+         Marketplace
+       </h2>
+@@ -116,7 +119,7 @@ export function MarketplacePanel({
+             value={query}
+             onChange={(e) => setQuery(e.target.value)}
+             placeholder="Search for pieces..."
+-            className="flex-1 bg-transparent text-sm placeholder:text-white/40 focus:outline-none"
++            className="flex-1 bg-transparent text-[18px] placeholder:text-white/40 focus:outline-none"
+           />
+         </div>
+         <button type="submit" className="pill-btn w-full shrink-0" disabled={loading}>
+@@ -130,11 +133,11 @@ export function MarketplacePanel({
+         </div>
+       ) : null}
+ 
+-      <div className="flex items-center justify-between text-[10px] tracking-[0.2em] uppercase text-white/50">
+-        <span style={{ fontFamily: "var(--font-mono)" }}>
++      <div className="flex items-center justify-between text-[14px] tracking-[0.1em] uppercase text-white/50">
++        <span style={{ fontFamily: "var(--font-pixel)" }}>
+           {loading ? "Loading results..." : `${items.length} items`}
+         </span>
+-        <span style={{ fontFamily: "var(--font-mono)" }}>
++        <span style={{ fontFamily: "var(--font-pixel)" }}>
+           Page {page + 1}
+         </span>
+       </div>
+@@ -145,7 +148,7 @@ export function MarketplacePanel({
+             key={item.id}
+             item={item}
+             isSelected={item.id === selectedItemId}
+-            onSelect={() => onSelectItem?.(item)}
++            onSelect={() => onSelectItem?.(item.id === selectedItemId ? null : item)}
+           />
+         ))}
+         {!loading && !error && items.length === 0 ? (
+@@ -156,7 +159,7 @@ export function MarketplacePanel({
+       </div>
+ 
+       <div className="flex items-center justify-between pt-1">
+-        <p className="text-[10px] tracking-[0.2em] text-white/50 uppercase max-w-[50%] truncate" style={{ fontFamily: "var(--font-mono)" }}>
++        <p className="text-[14px] tracking-[0.08em] text-white/50 uppercase max-w-[50%] truncate" style={{ fontFamily: "var(--font-pixel)" }}>
+           {submittedQuery ? `Results for ${submittedQuery}` : "Search Grailed"}
+         </p>
+         <div className="flex items-center gap-2">
+@@ -193,7 +196,12 @@ function ItemCard({
+ }) {
+   const [saved, setSaved] = useState(false);
+   return (
+-    <button type="button" onClick={onSelect} className="text-left group">
++    <button
++      type="button"
++      onClick={onSelect}
++      className="text-left group"
++      data-selection-anchor="true"
++    >
+       <div
+         className={`relative aspect-square bg-white/5 border overflow-hidden rounded-sm ${
+           isSelected
+@@ -226,15 +234,20 @@ function ItemCard({
+         </button>
+       </div>
+       <div className="pt-2">
+-        <p className="text-[11px] font-semibold leading-snug neon-pink line-clamp-1">{item.name}</p>
++        <p
++          className="text-[20px] leading-none neon-pink line-clamp-1"
++          style={{ fontFamily: "var(--font-pixel)" }}
++        >
++          {item.name}
++        </p>
+         {item.category ? (
+-          <p className="text-[10px] text-white/55 uppercase tracking-[0.16em] mt-1 line-clamp-1">{item.category}</p>
++          <p className="text-[14px] text-white/55 uppercase tracking-[0.08em] mt-1 line-clamp-1">{item.category}</p>
+         ) : null}
+         <div className="mt-1 flex items-center justify-between gap-2">
+-          <p className="text-sm text-white/90">
++          <p className="text-[22px] leading-none text-white/90">
+             {item.price != null ? `$${item.price}` : "--"}
+           </p>
+-          {item.size ? <p className="text-[10px] text-white/50 uppercase">Size {item.size}</p> : null}
++          {item.size ? <p className="text-[14px] text-white/50 uppercase">Size {item.size}</p> : null}
+         </div>
+         {item.productUrl ? (
+           <a
+@@ -242,8 +255,8 @@ function ItemCard({
+             target="_blank"
+             rel="noreferrer"
+             onClick={(event) => event.stopPropagation()}
+-            className="mt-2 inline-flex text-[10px] tracking-[0.18em] uppercase text-white/55 hover:neon-pink"
+-            style={{ fontFamily: "var(--font-mono)" }}
++            className="mt-2 inline-flex text-[14px] tracking-[0.08em] uppercase text-white/55 hover:neon-pink"
++            style={{ fontFamily: "var(--font-pixel)" }}
+           >
+             View
+           </a>
+diff --git a/frontend/src/components/dashboard/TaskBar.tsx b/frontend/src/components/dashboard/TaskBar.tsx
+index 366ce5c..3512ff8 100644
+--- a/frontend/src/components/dashboard/TaskBar.tsx
++++ b/frontend/src/components/dashboard/TaskBar.tsx
+@@ -22,7 +22,7 @@ export function TaskBar() {
+   return (
+     <footer
+       className="flex items-center justify-between border-t border-[color:var(--color-fc-border)] bg-[color:var(--color-fc-panel)] px-2 py-1 gap-2"
+-      style={{ fontFamily: "var(--font-mono)" }}
++      style={{ fontFamily: "var(--font-pixel)" }}
+     >
+       <div className="flex items-center gap-2">
+         <button
+@@ -32,9 +32,9 @@ export function TaskBar() {
+           <span className="inline-block w-3 h-3 bg-[conic-gradient(from_0deg,#ff26b9,#c940ff,#5df9ff,#72ff6b,#ff26b9)] rounded-sm" />
+           START
+         </button>
+-        <div className="pill-btn text-[10px] py-1">FITZ.EXE</div>
++        <div className="pill-btn text-[14px] py-1">FITZ.EXE</div>
+       </div>
+-      <div className="flex items-center gap-3 pr-3 text-xs text-white/70">
++      <div className="flex items-center gap-3 pr-3 text-[16px] text-white/70">
+         <Wifi size={12} />
+         <Volume2 size={12} />
+         <span className="tabular-nums">{time}</span>
+diff --git a/frontend/src/components/dashboard/TopBar.tsx b/frontend/src/components/dashboard/TopBar.tsx
+index b46052e..623fa24 100644
+--- a/frontend/src/components/dashboard/TopBar.tsx
++++ b/frontend/src/components/dashboard/TopBar.tsx
+@@ -15,7 +15,7 @@ const NAV_ITEMS: Array<{ id: TopBarProps["active"]; label: string }> = [
+   { id: "home", label: "HOME" },
+   { id: "browse", label: "BROWSE" },
+   { id: "closet", label: "CLOSET" },
+-  { id: "lookbook", label: "LOOKBOOK" },
++  { id: "lookbook", label: "OUTFITS" },
+ ];
+ 
+ export function TopBar({
+@@ -28,8 +28,8 @@ export function TopBar({
+   const primaryLabel = displayName?.trim() || username;
+ 
+   return (
+-    <header className="flex items-center justify-between px-6 py-3 border-b border-[color:var(--color-fc-border)] bg-black/70 backdrop-blur">
+-      <div className="flex items-baseline gap-4">
++    <header className="flex items-center justify-between px-6 py-3 border-b border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(10,4,16,0.98)_0%,rgba(5,0,8,0.96)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_14px_32px_rgba(0,0,0,0.38)] backdrop-blur">
++      <div className="flex flex-col items-center gap-1">
+         <h1
+           className="chrome-text text-5xl md:text-6xl font-black tracking-tighter leading-none"
+           style={{ fontFamily: "var(--font-retro)" }}
+@@ -37,8 +37,8 @@ export function TopBar({
+           FITZ
+         </h1>
+         <p
+-          className="text-[10px] md:text-xs tracking-[0.3em] text-[color:var(--color-fc-ice)]/60 uppercase"
+-          style={{ fontFamily: "var(--font-mono)" }}
++          className="text-center text-[15px] md:text-[16px] tracking-[0.12em] text-white uppercase"
++          style={{ fontFamily: "var(--font-pixel)" }}
+         >
+           Y2K Virtual Try-On
+         </p>
+@@ -52,14 +52,14 @@ export function TopBar({
+               key={item.id}
+               type="button"
+               onClick={() => onNavigate?.(item.id)}
+-              className={`text-sm tracking-[0.25em] font-semibold transition-colors ${
++              className={`inline-flex items-center justify-center text-[17px] md:text-[18px] leading-none tracking-[0.02em] uppercase transition-colors ${
+                 isActive
+-                  ? "neon-pink px-3 py-1 border border-[color:var(--color-fc-hot)] rounded"
+-                  : "text-white/80 hover:text-white"
++                  ? "h-[34px] min-w-[94px] px-4 border border-[#ff8ce3] bg-[linear-gradient(180deg,rgba(150,74,140,0.82)_0%,rgba(112,52,110,0.86)_100%)] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08),0_0_0_1px_rgba(255,38,185,0.22)]"
++                  : "px-0 text-[#bbb2bb] hover:text-white"
+               }`}
+-              style={{ fontFamily: "var(--font-mono)" }}
++              style={{ fontFamily: "var(--font-pixel)", borderRadius: isActive ? "2px" : "0px" }}
+             >
+-              {isActive ? `[ ${item.label} ]` : item.label}
++              {item.label}
+             </button>
+           );
+         })}
+@@ -67,8 +67,18 @@ export function TopBar({
+ 
+       <div className="flex items-center gap-3">
+         <div className="hidden sm:block text-right leading-tight">
+-          <p className="text-[10px] uppercase tracking-widest text-white/50">welcome back,</p>
+-          <p className="text-sm font-semibold neon-pink">{primaryLabel}</p>
++          <p
++            className="text-[16px] text-white/55"
++            style={{ fontFamily: "var(--font-pixel)" }}
++          >
++            welcome back,
++          </p>
++          <p
++            className="text-[22px] leading-none text-white"
++            style={{ fontFamily: "var(--font-pixel)" }}
++          >
++            {primaryLabel}
++          </p>
+         </div>
+         <div className="w-10 h-10 rounded border border-[color:var(--color-fc-neon)]/60 overflow-hidden">
+           {avatarUrl ? (
+diff --git a/frontend/src/components/dashboard/TryOnPanel.tsx b/frontend/src/components/dashboard/TryOnPanel.tsx
+index fa8b2e4..59f1018 100644
+--- a/frontend/src/components/dashboard/TryOnPanel.tsx
++++ b/frontend/src/components/dashboard/TryOnPanel.tsx
+@@ -1,36 +1,43 @@
+ "use client";
+ 
+-import { useState } from "react";
++import { useEffect, useState } from "react";
+ import { Camera, PersonStanding, Shirt } from "lucide-react";
+ 
+ import type { MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
+-import { addClosetItem } from "@/lib/api/backend";
++import { addClosetItem, fetchClosetItems } from "@/lib/api/backend";
+ 
+ interface TryOnPanelProps {
+   avatarUrl?: string;
+   currentItem?: MarketplaceItem | null;
+-  wornItem?: MarketplaceItem | null;
+-  onWearItem?: (item: MarketplaceItem | null) => void;
++  wornItems?: MarketplaceItem[];
++  onToggleWearItem?: (item: MarketplaceItem) => void;
+   accessToken?: string | null;
+   onClosetSaved?: () => void;
++  closetVersion?: number;
++  onSelectClosetItem?: (item: MarketplaceItem) => void;
+ }
+ 
+ export function TryOnPanel({
+   avatarUrl,
+   currentItem,
+-  wornItem,
+-  onWearItem,
++  wornItems = [],
++  onToggleWearItem,
+   accessToken,
+   onClosetSaved,
++  closetVersion = 0,
++  onSelectClosetItem,
+ }: TryOnPanelProps) {
+   const hasSelectedItem = Boolean(currentItem);
+-  const isWearingSelectedItem = Boolean(currentItem && wornItem?.id === currentItem.id);
++  const isWearingSelectedItem = Boolean(
++    currentItem && wornItems.some((item) => item.id === currentItem.id)
++  );
++  const featuredWornItem = wornItems[wornItems.length - 1] ?? null;
+ 
+   return (
+     <section className="y2k-window p-5 flex flex-col gap-4 h-full overflow-hidden">
+       <h2
+-        className="neon-pink text-sm tracking-[0.3em] uppercase"
+-        style={{ fontFamily: "var(--font-mono)" }}
++        className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase"
++        style={{ fontFamily: "var(--font-pixel)" }}
+       >
+         Virtual Try-On
+       </h2>
+@@ -51,24 +58,24 @@ export function TryOnPanel({
+               No avatar yet — generate one from your photos.
+             </div>
+           )}
+-          {wornItem?.imageUrl ? (
++          {featuredWornItem?.imageUrl ? (
+             <div className="absolute inset-x-6 top-6 bottom-20 pointer-events-none">
+               <div className="absolute top-0 right-0 liquid-glass rounded-lg px-3 py-2">
+                 <p
+-                  className="text-[10px] uppercase tracking-[0.24em] text-white/55"
+-                  style={{ fontFamily: "var(--font-mono)" }}
++                  className="text-[14px] uppercase tracking-[0.08em] text-white/55"
++                  style={{ fontFamily: "var(--font-pixel)" }}
+                 >
+                   Wearing now
+                 </p>
+                 <p className="mt-1 max-w-[11rem] text-xs text-white/80 line-clamp-2">
+-                  {wornItem.name}
++                  {featuredWornItem.name}
+                 </p>
+               </div>
+               <div className="absolute inset-0 flex items-center justify-center">
+                 {/* eslint-disable-next-line @next/next/no-img-element */}
+                 <img
+-                  src={wornItem.imageUrl}
+-                  alt={wornItem.name}
++                  src={featuredWornItem.imageUrl}
++                  alt={featuredWornItem.name}
+                   className="max-h-[70%] max-w-[68%] object-contain opacity-90 drop-shadow-[0_0_28px_rgba(255,38,185,0.22)]"
+                 />
+               </div>
+@@ -81,21 +88,34 @@ export function TryOnPanel({
+                  filter: "blur(6px)",
+                }}
+           />
++
++          <div
++            className={`absolute right-5 top-5 bottom-5 w-[18.5rem] max-w-[36%] flex items-start transition-all duration-300 ease-out ${
++              currentItem
++                ? "translate-x-0 opacity-100"
++                : "translate-x-6 opacity-0 pointer-events-none"
++            }`}
++            data-selection-anchor="true"
++          >
++            <ItemCard
++              item={currentItem}
++              hasSelectedItem={hasSelectedItem}
++              accessToken={accessToken ?? null}
++              onClosetSaved={onClosetSaved}
++            />
++          </div>
+         </div>
+ 
+-        <aside className="w-64 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
+-          <ItemCard
+-            item={currentItem}
+-            isWearingSelectedItem={isWearingSelectedItem}
+-            hasSelectedItem={hasSelectedItem}
++        <aside className="w-72 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
++          <ClosetPicker
+             accessToken={accessToken ?? null}
+-            onClosetSaved={onClosetSaved}
+-            onToggleWear={() => {
+-              if (!currentItem) {
+-                return;
+-              }
+-              onWearItem?.(isWearingSelectedItem ? null : currentItem);
+-            }}
++            version={closetVersion}
++            onSelectItem={onSelectClosetItem}
++          />
++          <WornClothesPanel
++            wornItems={wornItems}
++            onSelectItem={onSelectClosetItem}
++            onToggleWearItem={onToggleWearItem}
+           />
+         </aside>
+       </div>
+@@ -103,6 +123,221 @@ export function TryOnPanel({
+   );
+ }
+ 
++type ClosetPickerItem = {
++  id: string;
++  listingId: string;
++  image: string | null;
++  itemName: string;
++  source: string;
++  price: number | null;
++  size: string | null;
++  category: string | null;
++  productUrl: string | null;
++};
++
++function ClosetPicker({
++  accessToken,
++  version,
++  onSelectItem,
++}: {
++  accessToken: string | null;
++  version: number;
++  onSelectItem?: (item: MarketplaceItem) => void;
++}) {
++  const [closetItems, setClosetItems] = useState<ClosetPickerItem[]>([]);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState<string | null>(null);
++
++  useEffect(() => {
++    let cancelled = false;
++
++    async function loadCloset() {
++      setLoading(true);
++      setError(null);
++
++      try {
++        if (!accessToken) {
++          if (!cancelled) {
++            setClosetItems([]);
++            setLoading(false);
++          }
++          return;
++        }
++
++        const closetResponse = await fetchClosetItems(accessToken);
++
++        if (cancelled) {
++          return;
++        }
++
++        setClosetItems(
++          closetResponse.items.map((item) => ({
++            id: item.id,
++            listingId: item.listing_id,
++            image: item.image,
++            itemName: item.item_name,
++            source: item.source.toUpperCase(),
++            price: item.price,
++            size: item.size,
++            category: item.category ?? null,
++            productUrl: item.product_url ?? null,
++          }))
++        );
++      } catch (err: unknown) {
++        if (!cancelled) {
++          setError(err instanceof Error ? err.message : "Failed to load closet data.");
++        }
++      } finally {
++        if (!cancelled) {
++          setLoading(false);
++        }
++      }
++    }
++
++    void loadCloset();
++
++    return () => {
++      cancelled = true;
++    };
++  }, [accessToken, version]);
++
++  return (
++    <div className="liquid-glass overflow-hidden rounded-lg p-4 flex flex-col gap-3 min-h-0">
++      <div className="flex items-center justify-between">
++        <p
++          className="text-[18px] tracking-[0.08em] neon-pink uppercase"
++          style={{ fontFamily: "var(--font-pixel)" }}
++        >
++          My Closet
++        </p>
++        <p className="text-[0.9rem] uppercase text-white/50">
++          {loading ? "..." : `${closetItems.length} items`}
++        </p>
++      </div>
++
++      {error ? <p className="text-[11px] text-rose-300">{error}</p> : null}
++
++      {!loading && closetItems.length === 0 ? (
++        <p className="text-[0.95rem] leading-5 text-white/55">
++          Save items from the marketplace to fill your closet.
++        </p>
++      ) : (
++        <div className="grid grid-cols-2 gap-3 overflow-y-auto pr-1 min-h-[15rem] max-h-[20rem] content-start">
++          {closetItems.map((item) => (
++            <button
++              type="button"
++              key={item.id}
++              onClick={() =>
++                onSelectItem?.({
++                  id: item.listingId,
++                  source: item.source,
++                  name: item.itemName,
++                  price: item.price,
++                  category: item.category,
++                  size: item.size,
++                  imageUrl: item.image ?? undefined,
++                  productUrl: item.productUrl,
++                })
++              }
++              className="text-left"
++              title={item.itemName}
++              data-selection-anchor="true"
++            >
++              <div className="relative aspect-square overflow-hidden rounded-sm border border-[color:var(--color-fc-border)] bg-white/5">
++                {item.image ? (
++                  // eslint-disable-next-line @next/next/no-img-element
++                  <img
++                    src={item.image}
++                    alt={item.itemName}
++                    className="absolute inset-0 h-full w-full object-cover bg-neutral-100"
++                  />
++                ) : null}
++              </div>
++              <p className="mt-2 text-[0.98rem] leading-5 text-white/85 line-clamp-2">
++                {item.itemName}
++              </p>
++            </button>
++          ))}
++        </div>
++      )}
++    </div>
++  );
++}
++
++function WornClothesPanel({
++  wornItems,
++  onSelectItem,
++  onToggleWearItem,
++}: {
++  wornItems: MarketplaceItem[];
++  onSelectItem?: (item: MarketplaceItem) => void;
++  onToggleWearItem?: (item: MarketplaceItem) => void;
++}) {
++  return (
++    <div className="liquid-glass overflow-hidden rounded-lg p-4 flex flex-col gap-3">
++      <div className="flex items-center justify-between">
++        <p
++          className="text-[18px] tracking-[0.08em] neon-pink uppercase"
++          style={{ fontFamily: "var(--font-pixel)" }}
++        >
++          Saved Outfits
++        </p>
++        <p className="text-[0.9rem] uppercase text-white/50">{wornItems.length} worn</p>
++      </div>
++
++      {wornItems.length === 0 ? (
++        <p className="text-[0.95rem] leading-5 text-white/55">
++          Wear items from the marketplace or your closet and they&apos;ll show up here.
++        </p>
++      ) : (
++        <div className="flex flex-col gap-3 max-h-[15rem] overflow-y-auto pr-1">
++          {wornItems.map((item) => (
++            <div
++              key={item.id}
++              className="border border-[color:var(--color-fc-border)] bg-black/20 p-2 rounded-sm flex gap-3 items-start"
++            >
++              <button
++                type="button"
++                onClick={() => onSelectItem?.(item)}
++                className="shrink-0"
++                aria-label={`Select ${item.name}`}
++                data-selection-anchor="true"
++              >
++                <div className="relative h-[72px] w-[72px] overflow-hidden rounded-sm border border-[color:var(--color-fc-border)] bg-white/5">
++                  {item.imageUrl ? (
++                    // eslint-disable-next-line @next/next/no-img-element
++                    <img
++                      src={item.imageUrl}
++                      alt={item.name}
++                      className="absolute inset-0 h-full w-full object-cover bg-neutral-100"
++                    />
++                  ) : null}
++                </div>
++              </button>
++              <div className="min-w-0 flex-1">
++                <p className="text-[0.9rem] uppercase text-white/50">{item.source}</p>
++                <p className="text-[1rem] leading-5 text-white/85 break-words">{item.name}</p>
++                <div className="mt-2 flex items-center justify-between gap-2">
++                  <span className="text-[0.9rem] text-white/55">
++                    {item.price != null ? `$${item.price}` : "--"}
++                  </span>
++                  <button
++                    type="button"
++                    onClick={() => onToggleWearItem?.(item)}
++                    className="pill-btn-ghost px-3 py-1 text-[0.8rem]"
++                  >
++                    Remove
++                  </button>
++                </div>
++              </div>
++            </div>
++          ))}
++        </div>
++      )}
++    </div>
++  );
++}
++
+ function ToolButton({ icon, label }: { icon: React.ReactNode; label: string }) {
+   return (
+     <button
+@@ -114,7 +349,7 @@ function ToolButton({ icon, label }: { icon: React.ReactNode; label: string }) {
+       </span>
+       <span
+         className="text-[10px] tracking-[0.2em] uppercase"
+-        style={{ fontFamily: "var(--font-mono)" }}
++        style={{ fontFamily: "var(--font-pixel)" }}
+       >
+         {label}
+       </span>
+@@ -125,17 +360,13 @@ function ToolButton({ icon, label }: { icon: React.ReactNode; label: string }) {
+ function ItemCard({
+   item,
+   hasSelectedItem,
+-  isWearingSelectedItem,
+   accessToken,
+   onClosetSaved,
+-  onToggleWear,
+ }: {
+   item?: MarketplaceItem | null;
+   hasSelectedItem: boolean;
+-  isWearingSelectedItem: boolean;
+   accessToken: string | null;
+   onClosetSaved?: () => void;
+-  onToggleWear: () => void;
+ }) {
+   const [isSavingToCloset, setIsSavingToCloset] = useState(false);
+   const [closetSavedItemId, setClosetSavedItemId] = useState<string | null>(null);
+@@ -184,46 +415,49 @@ function ItemCard({
+   const isSavedToCloset = Boolean(item && closetSavedItemId === item.id);
+ 
+   return (
+-    <div className="liquid-glass overflow-visible rounded-lg p-4 flex flex-col gap-3">
++    <div className="w-full rounded-[6px] border border-[rgba(255,255,255,0.08)] bg-[linear-gradient(180deg,rgba(19,10,28,0.96)_0%,rgba(10,6,16,0.98)_100%)] px-4 py-4 shadow-[0_0_0_1px_rgba(255,38,185,0.08),0_20px_45px_rgba(0,0,0,0.45)]">
+       <p
+-        className="text-[10px] tracking-[0.25em] neon-pink uppercase"
+-        style={{ fontFamily: "var(--font-mono)" }}
++        className="text-[0.95rem] tracking-[0.1em] neon-pink uppercase"
++        style={{ fontFamily: "var(--font-pixel)" }}
+       >
+         Current item
+       </p>
+-      <div className="space-y-2">
+-        <p className="text-lg font-semibold">{item?.source ?? "No selection"}</p>
+-        <p className="text-sm leading-7 text-white/70 break-words">
++      <div className="mt-3 space-y-2">
++        <p
++          className="text-[1.1rem] leading-6 text-white/82 break-words"
++          style={{ fontFamily: "var(--font-pixel)" }}
++        >
+           {item?.name ?? "Pick an item from marketplace"}
+         </p>
+       </div>
+-      <div className="flex items-center justify-between text-xs">
+-        <span className="text-white/60">SIZE:</span>
++      <div className="mt-4 h-px bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.14)_16%,rgba(255,255,255,0.14)_84%,transparent_100%)]" />
++      <div
++        className="mt-3 flex items-center justify-between text-[1.2rem]"
++        style={{ fontFamily: "var(--font-pixel)" }}
++      >
++        <span className="text-white/65">SIZE:</span>
+         <span className="text-white uppercase">{normalizedSize}</span>
+       </div>
+-      <div className="flex items-center justify-between text-xs">
+-        <span className="text-white/60">PRICE:</span>
++      <div className="mt-3 h-px bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.14)_16%,rgba(255,255,255,0.14)_84%,transparent_100%)]" />
++      <div
++        className="mt-3 flex items-center justify-between text-[1.2rem]"
++        style={{ fontFamily: "var(--font-pixel)" }}
++      >
++        <span className="text-white/65">PRICE:</span>
+         <span className="text-white">{item?.price != null ? `$${item.price}` : "--"}</span>
+       </div>
+-      <div className="px-1 pt-5 pb-5 flex flex-col gap-3">
++      <div className="mt-6 flex flex-col gap-3">
+         <button
+           type="button"
+           onClick={handleAddToCloset}
+           disabled={!hasSelectedItem}
+-          className="pill-btn w-full disabled:opacity-50 disabled:cursor-not-allowed"
++          className="w-full border border-[#ff7ddd] bg-[linear-gradient(180deg,#f06ddd_0%,#d957ce_100%)] px-4 py-3 text-[1.2rem] uppercase text-[#22061e] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_0_18px_rgba(255,38,185,0.18)] disabled:opacity-50 disabled:cursor-not-allowed"
++          style={{ fontFamily: "var(--font-pixel)" }}
+         >
+           {isSavingToCloset ? "Saving..." : isSavedToCloset ? "Added to closet" : "Add to closet"}
+         </button>
+-        <button
+-          type="button"
+-          onClick={onToggleWear}
+-          disabled={!hasSelectedItem}
+-          className="pill-btn-ghost w-full disabled:opacity-50 disabled:cursor-not-allowed"
+-        >
+-          {isWearingSelectedItem ? "Remove item" : "Wear item"}
+-        </button>
+         {closetError ? (
+-          <p className="text-[10px] text-rose-300">{closetError}</p>
++          <p className="text-[0.82rem] text-rose-300">{closetError}</p>
+         ) : null}
+       </div>
+     </div>

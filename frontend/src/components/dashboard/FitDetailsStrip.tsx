@@ -24,8 +24,8 @@ export function FitDetailsStrip({
       {/* Polaroid detail shots */}
       <div className="flex items-center justify-center gap-5">
         <p
-          className="neon-pink text-sm tracking-[0.3em] uppercase self-start mt-2"
-          style={{ fontFamily: "var(--font-mono)" }}
+          className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase self-start mt-2"
+          style={{ fontFamily: "var(--font-pixel)" }}
         >
           Fit Details
         </p>
@@ -36,8 +36,8 @@ export function FitDetailsStrip({
       {/* Fit match */}
       <div className="y2k-window p-4 flex flex-col gap-2">
         <p
-          className="neon-pink text-xs tracking-[0.3em] uppercase"
-          style={{ fontFamily: "var(--font-mono)" }}
+          className="neon-pink text-[22px] leading-none tracking-[0.12em] uppercase"
+          style={{ fontFamily: "var(--font-pixel)" }}
         >
           Fit Match
         </p>
@@ -47,7 +47,7 @@ export function FitDetailsStrip({
         >
           {matchScore}%
         </p>
-        <p className="text-[10px] tracking-[0.25em] text-white/60 uppercase">
+        <p className="text-[14px] tracking-[0.08em] text-white/60 uppercase">
           This look hits.
         </p>
         <div className="pixel-bar mt-1">
