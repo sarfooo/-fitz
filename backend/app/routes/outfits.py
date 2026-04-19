@@ -1,5 +1,4 @@
 from time import monotonic
-import re
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -23,7 +22,6 @@ router = APIRouter(prefix="/outfits", tags=["outfits"])
 
 _COMMUNITY_CACHE_TTL_SECONDS = 300
 _community_cache: dict[str, tuple[float, CommunityOutfitsResponse]] = {}
-_AUTO_USERNAME_RE = re.compile(r"^user_[a-f0-9]{6,}$", re.IGNORECASE)
 
 
 _ANGLE_ORDER: tuple[str, ...] = (
@@ -103,13 +101,7 @@ def normalize_community_outfit(row):
     profile = row.get("profiles") or {}
     raw_username = (profile.get("username") or "").strip()
     display_name = profile.get("display_name")
-    username = raw_username or "community"
-
-    if _AUTO_USERNAME_RE.match(username):
-        if isinstance(display_name, str) and display_name.strip():
-            username = display_name.strip()
-        else:
-            username = "community"
+    username = raw_username or "unknown"
 
     return CommunityOutfit(
         **outfit.model_dump(),
