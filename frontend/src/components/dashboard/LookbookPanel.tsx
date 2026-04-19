@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
+import { OutfitDetailModal } from "@/components/dashboard/OutfitDetailModal";
 import { fetchOutfits, type SavedOutfit } from "@/lib/api/backend";
 
 interface LookbookPanelProps {
@@ -19,6 +20,7 @@ export function LookbookPanel({
   const [outfits, setOutfits] = useState<SavedOutfit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedOutfit, setSelectedOutfit] = useState<SavedOutfit | null>(null);
 
   useEffect(() => {
     if (!accessToken) {
@@ -97,7 +99,7 @@ export function LookbookPanel({
           <button
             key={outfit.id}
             type="button"
-            onClick={() => onSelectOutfit?.(outfit)}
+            onClick={() => setSelectedOutfit(outfit)}
             className="group text-left"
           >
             <div className="relative aspect-[4/5] bg-white/5 border border-[color:var(--color-fc-border)] overflow-hidden rounded-sm group-hover:border-[color:var(--color-fc-hot)] transition-colors">
@@ -129,6 +131,15 @@ export function LookbookPanel({
           </div>
         ) : null}
       </div>
+
+      <OutfitDetailModal
+        outfit={selectedOutfit}
+        onClose={() => setSelectedOutfit(null)}
+        onShowInTryOn={(outfit) => {
+          setSelectedOutfit(null);
+          onSelectOutfit?.(outfit);
+        }}
+      />
     </section>
   );
 }

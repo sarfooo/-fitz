@@ -29,6 +29,8 @@ interface TryOnPanelProps {
   onRequestAvatarSetup?: () => void;
   onFitSaved?: () => void;
   onClosetSaved?: () => void;
+  preloadedAngles?: string[];
+  preloadedRenderId?: string | null;
 }
 
 type Mode = "base" | "rendered";
@@ -48,6 +50,8 @@ export function TryOnPanel({
   onRequestAvatarSetup,
   onFitSaved,
   onClosetSaved,
+  preloadedAngles,
+  preloadedRenderId,
 }: TryOnPanelProps) {
   const [mode, setMode] = useState<Mode>("base");
   const [renderedImages, setRenderedImages] = useState<string[]>([]);
@@ -84,6 +88,15 @@ export function TryOnPanel({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!preloadedAngles || preloadedAngles.length === 0) return;
+    setRenderedImages(preloadedAngles);
+    setRenderId(preloadedRenderId ?? null);
+    setMode("rendered");
+    setAnglesError(null);
+    onStageImageChange?.(preloadedAngles[0]);
+  }, [preloadedAngles, preloadedRenderId, onStageImageChange]);
 
   function handleResetView() {
     onResetOutfit();
@@ -285,6 +298,7 @@ export function TryOnPanel({
         name: outfitName,
         closet_item_ids: savedItems.map((item) => item.id),
         cover_image: coverImage,
+        render_id: renderId,
       });
 
       setSaveMessage("Outfit saved.");

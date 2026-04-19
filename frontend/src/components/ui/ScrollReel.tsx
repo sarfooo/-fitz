@@ -95,7 +95,8 @@ export function ScrollReel({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         onPointerLeave={endDrag}
-        className={`flex overflow-x-auto overflow-y-hidden scroll-smooth snap-x snap-mandatory select-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${trackClassName}`}
+        onDragStart={(event) => event.preventDefault()}
+        className={`flex overflow-x-auto overflow-y-hidden scroll-smooth snap-x snap-mandatory select-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&_img]:select-none [&_img]:[-webkit-user-drag:none] ${trackClassName}`}
         style={{ touchAction: "pan-y" }}
       >
         {children}

@@ -37,6 +37,8 @@ export interface SavedOutfit {
   cover_image: string | null;
   created_at: string;
   items: ClosetItem[];
+  render_id: string | null;
+  angles: RenderAngle[];
 }
 
 export interface ClosetResponse {
@@ -60,6 +62,7 @@ export interface AddSavedOutfitRequest {
   name: string;
   closet_item_ids: string[];
   cover_image?: string | null;
+  render_id?: string | null;
 }
 
 export interface AddSavedOutfitResponse {

@@ -63,6 +63,8 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
   const [lookbookRefresh, setLookbookRefresh] = useState(0);
   const [closetVersion, setClosetVersion] = useState(0);
   const [outfitPreviewImage, setOutfitPreviewImage] = useState<string | null>(null);
+  const [preloadedAngles, setPreloadedAngles] = useState<string[]>([]);
+  const [preloadedRenderId, setPreloadedRenderId] = useState<string | null>(null);
   const [suggestionSignals, setSuggestionSignals] = useState<SuggestionSignals>(() => {
     if (typeof window === "undefined") {
       return EMPTY_SIGNALS;
@@ -233,10 +235,18 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
       productUrl: item.product_url,
     }));
 
+    const angleUrls = outfit.angles
+      .map((angle) => angle.image_url)
+      .filter((url): url is string => Boolean(url));
+
     setWornItems(restoredItems);
     setSelectedItem(null);
     setSelectedItemOrigin(null);
-    setOutfitPreviewImage(outfit.cover_image ?? null);
+    setOutfitPreviewImage(
+      angleUrls[0] ?? outfit.cover_image ?? null,
+    );
+    setPreloadedAngles(angleUrls);
+    setPreloadedRenderId(outfit.render_id);
     setActiveView("home");
   }, []);
 
@@ -307,6 +317,8 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
             onRequestAvatarSetup={handleOpenSetup}
             onFitSaved={handleFitSaved}
             onClosetSaved={handleClosetSaved}
+            preloadedAngles={preloadedAngles}
+            preloadedRenderId={preloadedRenderId}
           />
         </div>
       ) : null}

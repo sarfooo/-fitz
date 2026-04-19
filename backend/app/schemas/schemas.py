@@ -89,10 +89,18 @@ class DeleteClosetItemResponse(BaseModel):
     closet_item_id: str
 
 
+class RenderAngleOut(BaseModel):
+    angle: str
+    image_url: str | None = None
+    storage_path: str | None = None
+    bucket: str | None = None
+
+
 class OutfitCreateRequest(BaseModel):
     name: str
     closet_item_ids: list[str] = Field(default_factory=list)
     cover_image: str | None = None
+    render_id: str | None = None
 
 
 class OutfitItem(BaseModel):
@@ -107,6 +115,8 @@ class SavedOutfit(BaseModel):
     cover_image: str | None = None
     created_at: str
     items: list[ClosetItem] = Field(default_factory=list)
+    render_id: str | None = None
+    angles: list[RenderAngleOut] = Field(default_factory=list)
 
 
 class SavedOutfitsResponse(BaseModel):
@@ -259,13 +269,6 @@ RenderStatus = Literal["pending", "ready", "failed"]
 class FitStartResponse(BaseModel):
     render_id: str
     status: RenderStatus = "pending"
-
-
-class RenderAngleOut(BaseModel):
-    angle: str
-    image_url: str | None = None
-    storage_path: str | None = None
-    bucket: str | None = None
 
 
 class FitStatusResponse(BaseModel):
