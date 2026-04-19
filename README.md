@@ -1,141 +1,134 @@
-# Fitz
+# fitz
 
-Virtual try-on for archive and secondhand fashion. Users build a body profile, generate a personalized avatar, and preview how clothing from marketplaces like Grailed and Mercari will look on their body before buying.
+**See how clothes actually look on you before you buy them.**
 
-> Fitz gives shoppers a personalized, directionally accurate preview of how a piece may look on their body — without leaving the couch.
+fitz is the app. It pairs the **Grailed API** with a virtual try-on so you can preview archive and secondhand listings on your own body before you commit to a purchase. You make a body profile, we generate a personalized avatar in a consistent house style, and you try Grailed items on that avatar.
+
+> One-sentence pitch: fitz pulls listings from the Grailed API and shows you how they actually look on your body before you buy.
 
 ---
 
-## Stack
+## The core idea
 
-| Layer     | Tech                                                                 |
-| --------- | -------------------------------------------------------------------- |
-| Frontend  | Next.js 16, React 19, TypeScript, Tailwind v4, Framer Motion         |
-| Backend   | FastAPI, Pydantic v2, httpx, Pillow / OpenCV                         |
-| AI        | Google GenAI (Gemini / "nano-banana"), Dedalus Labs, Higgsfield      |
-| Data      | Supabase (Postgres + Storage + Auth)                                 |
-| Infra     | Docker Compose, Caddy (auto-TLS), VPS deploy                         |
+Shopping resale is a fit lottery. Listing photos are shot on a different body, in a different size, under different lighting. Basic fit questions — *will this look oversized on me? do these pants stack right? does this silhouette work with my shoulders?* — are almost impossible to answer from a thumbnail grid.
+
+fitz answers them by combining three things:
+
+1. **The Grailed API** — live listings pulled directly from Grailed.
+2. **A body profile** — a few photos and measurements.
+3. **A personalized avatar** — generated once, reused forever.
+4. **An image-based try-on render** — put a specific Grailed garment on that specific avatar.
+
+The first version is deliberately image-based, not 3D cloth simulation. The goal is a preview that is *directionally accurate and stylistically believable*, not physically exact.
+
+---
+
+## Product pillars
+
+- **Grailed API** — search and listing data pulled straight from Grailed
+- **Body Profile** — photos + height/weight/sizes/fit preference
+- **Virtual Try-On** — render a specific Grailed item on your avatar
+- **Closet & Lookbook** — save items, save full outfits, browse community looks
+- **Credits** — renders cost credits; new users start with a few free
+
+---
+
+## Rendering philosophy
+
+Every render should feel like it belongs to the same fitz universe *and* look like a different real person.
+
+| Stays consistent across users | Changes per user |
+| ----------------------------- | ---------------- |
+| Framing, pose family, lighting | Face, hair, skin tone |
+| fitz visual identity | Body shape, proportions |
+| Editorial presentation | Silhouette |
+
+Internally this splits into two layers:
+
+- **Identity layer** — who the person is. Changes only when the profile changes.
+- **Fit layer** — how the garment sits. Changes per item, size, and styling choice.
+
+The avatar is generated once from reference photos, then reused — so you don't get a different-looking person every time you try something on.
 
 ---
 
 ## Repo layout
 
 ```
-.
-├── frontend/         Next.js app (dashboard, onboarding, checkout)
-├── backend/          FastAPI service (try-on, closet, outfits, credits)
-├── supabase/         SQL migrations for schema + storage
-├── avatar/, avatar2/ Avatar generation experiments
-├── outfits/          Sample outfit assets
-├── snapshots/        Reference screenshots
-├── docker-compose.yml
-└── Caddyfile
+frontend/     Next.js app — landing, auth, dashboard (browse + try-on + closet)
+backend/      FastAPI service — avatar, try-on, browse, closet, outfits, credits
+supabase/     SQL migrations for the Postgres schema + RLS
+avatar/       Avatar generation experiments
+outfits/      Sample outfit assets
+Caddyfile     Reverse-proxy + TLS for the deployed API
+docker-compose.yml  Single-VPS deploy (backend + Caddy)
+codex.md      Original product brief
 ```
-
-### Frontend (`frontend/`)
-
-Route structure under `src/app`:
-
-- `/` — landing
-- `/login`, `/signup`
-- `/dashboard` — main workspace (browse, try-on, closet, lookbook, community, credits)
-- `/checkout` — credit purchases
-
-Components live under `src/components/{auth,dashboard,landing,ui}`. API calls are centralized in `src/lib/api/backend.ts`.
-
-> **Note:** this repo uses a version of Next.js with breaking changes from the docs you may remember — consult `frontend/node_modules/next/dist/docs/` before editing framework-level code.
-
-### Backend (`backend/`)
-
-FastAPI routes under `app/routes/`:
-
-- `onboarding` — body profile + avatar generation
-- `browse` — marketplace item feed
-- `tryon` — outfit render pipeline
-- `closet` — saved items
-- `outfits` — saved outfits + detail
-- `credits` — wallet + transactions
-
-Core services under `app/services/` (`banana.py`, `fit_pipeline.py`, `closet.py`, ...). Config in `app/config.py`, schemas in `app/schemas/`.
-
-### Supabase (`supabase/migrations/`)
-
-1. `0001_init.sql` — base tables + storage buckets
-2. `0002_core_api_tables.sql` — items, closet, renders, credits
-3. `0003_lookbook.sql` — community outfits
-4. `0004_profile_usernames.sql` — handles for community tab
-5. `0005_saved_outfits_render_link.sql` — outfit ↔ render join
-
-Two **private** Storage buckets are required: `avatars` and `renders`.
 
 ---
 
-## Local development
+## Stack
 
-### 1. Supabase
+- **Frontend** — Next.js, React, TypeScript, Tailwind, Framer Motion
+- **Backend** — FastAPI, Pydantic, httpx
+- **Data + Auth + Storage** — Supabase (Postgres + Storage + Auth), with row-level security
+- **AI** — image generation APIs for avatar + try-on rendering
+- **Scraping** — Grailed via Algolia-backed search
+- **Infra** — Docker Compose + Caddy (auto-TLS) on a single VPS
 
-Create a Supabase project, then from the SQL editor run every file in `supabase/migrations/` in order. In Storage, create private buckets `avatars` and `renders`.
+---
 
-### 2. Backend
+## Running it locally
+
+**Supabase.** Create a project, run every file in `supabase/migrations/` in order, and create two **private** storage buckets: `avatars` and `renders`.
+
+**Backend.**
 
 ```bash
 cd backend
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill in SUPABASE_*, DEDALUS_API_KEY, GOOGLE_API_KEY, ...
+cp .env.example .env        # fill in SUPABASE_* + AI provider keys
 uvicorn main:app --reload --port 8000
 ```
 
-Interactive API at http://localhost:8000/docs.
+API docs at http://localhost:8000/docs.
 
-### 3. Frontend
+**Frontend.**
 
 ```bash
 cd frontend
 npm install
-npm run dev          # http://localhost:3005
+npm run dev                 # http://localhost:3005
 ```
 
-Environment variables for the frontend live in `frontend/.env.local` (Supabase URL + anon key, backend base URL).
+Frontend `.env.local` needs the Supabase URL + anon key and the backend base URL.
 
 ---
 
-## Production
+## Accuracy honesty
 
-Single-VPS deploy via Docker Compose + Caddy:
+fitz aims for:
 
-```bash
-docker compose up -d --build
-```
+- strong identity similarity to the real user
+- believable body shape and silhouette
+- directionally useful fit guidance
 
-- `backend` container exposes `:8000` internally
-- `caddy` terminates TLS on `:443` and proxies to the backend
-- Host-side `/opt/fitcheck/.env` is mounted into the backend container
-- DNS `api.myfitz.us` → VPS public IP; Caddy handles Let's Encrypt automatically
+fitz does **not** promise:
 
----
+- exact fabric physics
+- exact garment drape from a single listing photo
+- one-to-one body reconstruction
 
-## Product pillars
-
-1. **Body Profile** — photos + measurements → normalized profile
-2. **Marketplace Browse** — curated sample listings (Grailed / Mercari ingestion later)
-3. **Virtual Try-On** — image-based render, not 3D cloth sim
-4. **Closet & Lookbook** — saved items, saved outfits, community feed
-5. **Credits** — 3 free on signup, 1 credit / standard render, 3 / premium
-
-### Rendering philosophy
-
-- One cohesive FitCheck visual identity (framing, lighting, pose family)
-- A different personalized model per user (face, skin, hair, silhouette)
-- Identity layer changes only when the profile changes; the fit layer changes per garment
+The product claim is a *personalized, directionally accurate preview* — not a measurement tool.
 
 ---
 
 ## Roadmap
 
-- **Phase 1 — Demoable frontend** — app shell, browse, try-on, closet, lookbook, credits UI
-- **Phase 2 — Core product logic** — onboarding, avatar state, render jobs, credit deduction
-- **Phase 3 — Backend & persistence** — full schema, auth, storage, API endpoints
-- **Phase 4 — AI integration** — body profile processing, garment analysis, try-on rendering, recs
+1. **Demoable frontend** — app shell, browse, try-on, closet, lookbook
+2. **Core product logic** — onboarding, avatar state, render jobs, credits
+3. **Backend + persistence** — schema, auth, storage, API endpoints
+4. **AI integration** — body profile, garment analysis, try-on rendering
 
+See `codex.md` for the full brief.
