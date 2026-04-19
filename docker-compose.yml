@@ -13,7 +13,7 @@ services:
       args:
         NEXT_PUBLIC_SUPABASE_URL: "https://aaqpcgiohgaumgkthlbm.supabase.co"
         NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhcXBjZ2lvaGdhdW1na3RobGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0OTYzMDYsImV4cCI6MjA5MjA3MjMwNn0.XNNr24GERjyZyADx82PKuoQXtsmMzotTHVr-stppxnM"
-        NEXT_PUBLIC_API_BASE_URL: "/api"
+        NEXT_PUBLIC_API_BASE_URL: "http://2.24.212.226:8001"
     image: fitcheck-frontend:latest
     container_name: fitcheck-frontend
     restart: unless-stopped

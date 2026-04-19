@@ -30,11 +30,10 @@ function useTypedSequence(lines: BootLine[], charSpeed = 9, lineDelay = 90) {
   const [displayed, setDisplayed] = useState<string[]>(() =>
     lines.map(() => "")
   );
-  const [done, setDone] = useState(false);
+  const done = lineIdx >= lines.length;
 
   useEffect(() => {
-    if (lineIdx >= lines.length) {
-      setDone(true);
+    if (done) {
       return;
     }
     const line = lines[lineIdx].text;
@@ -52,7 +51,7 @@ function useTypedSequence(lines: BootLine[], charSpeed = 9, lineDelay = 90) {
       }
     }, charSpeed);
     return () => window.clearInterval(interval);
-  }, [lineIdx, lines, charSpeed, lineDelay]);
+  }, [done, lineIdx, lines, charSpeed, lineDelay]);
 
   return { displayed, done, activeLine: lineIdx };
 }
@@ -61,10 +60,15 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
   const boot = useTypedSequence(BOOT_LINES);
 
   // Fake clock for the status bar — updates once a second.
-  const [clock, setClock] = useState<string>(() => formatClock(new Date()));
+  const [clock, setClock] = useState<string>("--:--:--");
   useEffect(() => {
-    const id = window.setInterval(() => setClock(formatClock(new Date())), 1000);
-    return () => window.clearInterval(id);
+    const updateClock = () => setClock(formatClock(new Date()));
+    const initialId = window.setTimeout(updateClock, 0);
+    const intervalId = window.setInterval(updateClock, 1000);
+    return () => {
+      window.clearTimeout(initialId);
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   return (
@@ -222,22 +226,23 @@ interface AuthSubmitProps {
 }
 
 export function AuthSubmit({ loading, children }: AuthSubmitProps) {
-  const [dots, setDots] = useState<string>("");
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     if (!loading) {
-      setDots("");
       return;
     }
     const id = window.setInterval(() => {
-      setDots((d) => (d.length >= 3 ? "" : `${d}.`));
+      setTick((value) => value + 1);
     }, 260);
     return () => window.clearInterval(id);
   }, [loading]);
 
+  const dots = loading ? ".".repeat(tick % 4) : "";
+
   const label = useMemo(
     () => (loading ? `processing${dots}` : <>[ {children} ]</>),
-    [loading, dots, children]
+    [children, dots, loading]
   );
 
   return (

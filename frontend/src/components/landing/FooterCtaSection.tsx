@@ -21,7 +21,7 @@ export function FooterCtaSection() {
         className="chrome-text text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter leading-[0.95] relative"
         style={{ fontFamily: "var(--font-retro)" }}
       >
-        FIT CHECK.
+        FITZ.
       </motion.h2>
       <motion.p
         initial={{ opacity: 0 }}
@@ -30,7 +30,7 @@ export function FooterCtaSection() {
         transition={{ duration: 0.6, delay: 0.3 }}
         className="text-white/60 text-base md:text-lg mt-6 max-w-md mx-auto"
       >
-        Stop returning things that didn't fit. Start rendering them first.
+        Stop returning things that didn&apos;t fit. Start rendering them first.
       </motion.p>
       <motion.div
         initial={{ opacity: 0, y: 12 }}
