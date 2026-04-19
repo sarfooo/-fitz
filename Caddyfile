@@ -1,17 +1,22 @@
-# Caddy auto-provisions Let's Encrypt certs on first request.
-# DNS A record for api.myfitz.us must point at the VPS public IP first.
+# Single-host VPS setup.
+# Serves the Next.js frontend and proxies backend routes under /api.
 
-api.myfitz.us {
+:80 {
     encode zstd gzip
 
-    # Long timeouts so image-gen requests (can take 30-60s) aren't killed
-    # while they wait on Dedalus / Higgsfield.
-    reverse_proxy backend:8000 {
-        transport http {
-            read_timeout 180s
-            write_timeout 180s
-            dial_timeout 10s
+    @api path /api/*
+    handle_path @api {
+        reverse_proxy backend:8000 {
+            transport http {
+                read_timeout 180s
+                write_timeout 180s
+                dial_timeout 10s
+            }
         }
+    }
+
+    handle {
+        reverse_proxy frontend:3005
     }
 
     log {
@@ -19,14 +24,3 @@ api.myfitz.us {
         format console
     }
 }
-
-# Placeholder for the frontend once the Next.js app exists and is either
-# built into a sibling container or deployed to Vercel. If you deploy the
-# frontend to Vercel, delete the block below.
-#
-# myfitz.us, www.myfitz.us {
-#     encode zstd gzip
-#     root * /srv/frontend
-#     try_files {path} /index.html
-#     file_server
-# }

@@ -12,6 +12,27 @@
 # Caddy handles TLS automatically on first request once DNS resolves.
 
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: "https://aaqpcgiohgaumgkthlbm.supabase.co"
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFhcXBjZ2lvaGdhdW1na3RobGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0OTYzMDYsImV4cCI6MjA5MjA3MjMwNn0.XNNr24GERjyZyADx82PKuoQXtsmMzotTHVr-stppxnM"
+        NEXT_PUBLIC_API_BASE_URL: "/api"
+    image: fitcheck-frontend:latest
+    container_name: fitcheck-frontend
+    restart: unless-stopped
+    expose:
+      - "3005"
+    depends_on:
+      - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   backend:
     build:
       context: ./backend
@@ -47,6 +68,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
+      - frontend
       - backend
     logging:
       driver: json-file
