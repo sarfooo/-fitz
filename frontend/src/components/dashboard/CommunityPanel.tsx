@@ -33,6 +33,24 @@ function shuffleOutfits(outfits: CommunityOutfit[]) {
   return next;
 }
 
+async function loadCommunityOutfits(accessToken: string) {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetchCommunityOutfits(accessToken);
+      return shuffleOutfits(response.outfits);
+    } catch (err) {
+      lastError = err;
+      if (attempt === 0) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 export function CommunityPanel({ accessToken, onSelectOutfit }: CommunityPanelProps) {
   const [outfits, setOutfits] = useState<CommunityOutfit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,13 +69,14 @@ export function CommunityPanel({ accessToken, onSelectOutfit }: CommunityPanelPr
       setLoading(true);
       setError(null);
       try {
-        const response = await fetchCommunityOutfits(accessToken);
+        const response = await loadCommunityOutfits(accessToken);
         if (!cancelled) {
-          setOutfits(shuffleOutfits(response.outfits));
+          setOutfits(response);
         }
-      } catch (err) {
+      } catch {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load community outfits.");
+          setOutfits([]);
+          setError("Couldn’t load community right now. Try refresh in a sec.");
         }
       } finally {
         if (!cancelled) {
@@ -78,10 +97,11 @@ export function CommunityPanel({ accessToken, onSelectOutfit }: CommunityPanelPr
     setLoading(true);
     setError(null);
     try {
-      const response = await fetchCommunityOutfits(accessToken);
-      setOutfits(shuffleOutfits(response.outfits));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load community outfits.");
+      const response = await loadCommunityOutfits(accessToken);
+      setOutfits(response);
+    } catch {
+      setOutfits([]);
+      setError("Couldn’t load community right now. Try refresh in a sec.");
     } finally {
       setLoading(false);
     }
@@ -161,53 +181,55 @@ export function CommunityPanel({ accessToken, onSelectOutfit }: CommunityPanelPr
         </div>
       ) : null}
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 content-start auto-rows-max justify-items-start">
-        {filteredOutfits.map((outfit) => (
-          <button
-            key={outfit.id}
-            type="button"
-            onClick={() => onSelectOutfit?.(mapCommunityOutfitItems(outfit))}
-            className="group w-full max-w-[18.5rem] text-left rounded-sm border border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(15,9,22,0.94)_0%,rgba(7,4,12,0.98)_100%)] p-3 hover:border-[color:var(--color-fc-hot)] transition-colors"
-          >
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="min-w-0 text-[10px] uppercase text-white/55 line-clamp-1">
-                @{outfit.username}
-              </p>
-              <p className="text-[10px] uppercase text-white/35 shrink-0">
-                {outfit.item_count} items
-              </p>
-            </div>
-            <div className="relative aspect-[3/4] overflow-hidden rounded-sm border border-white/10 bg-white/5">
-              {outfit.cover_image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={outfit.cover_image}
-                  alt={outfit.name || "community outfit"}
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-widest text-white/40">
-                  No image
+      {!loading && filteredOutfits.length === 0 && !error ? (
+        <div className="border border-white/10 bg-black/20 px-4 py-6 text-center text-sm text-white/50">
+          {submittedQuery ? "No community outfits matched that search." : "No community outfits yet."}
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden pb-2">
+          <div className="flex min-w-max gap-3">
+            {filteredOutfits.map((outfit) => (
+              <button
+                key={outfit.id}
+                type="button"
+                onClick={() => onSelectOutfit?.(mapCommunityOutfitItems(outfit))}
+                className="group w-48 shrink-0 text-left rounded-lg border border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(15,9,22,0.94)_0%,rgba(7,4,12,0.98)_100%)] p-2 hover:border-[color:var(--color-fc-hot)] transition-colors"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="min-w-0 text-[11px] uppercase text-white line-clamp-1">
+                    @{outfit.username}
+                  </p>
+                  <p className="text-[10px] uppercase text-white/35 shrink-0">
+                    {outfit.item_count} items
+                  </p>
                 </div>
-              )}
-            </div>
-            <div className="mt-3 min-w-0">
-              <p className="text-[11px] uppercase text-white/88 line-clamp-1">
-                {outfit.name || "Untitled outfit"}
-              </p>
-              <p className="mt-1 text-[10px] uppercase text-white/45 line-clamp-1">
-                {outfit.display_name ? `by ${outfit.display_name}` : "community look"}
-              </p>
-            </div>
-          </button>
-        ))}
-
-        {!loading && filteredOutfits.length === 0 && !error ? (
-          <div className="col-span-full border border-white/10 bg-black/20 px-4 py-6 text-center text-sm text-white/50">
-            {submittedQuery ? "No community outfits matched that search." : "No community outfits yet."}
+                <div className="relative aspect-[3/4] overflow-hidden rounded-md border border-white/10 bg-white/5">
+                  {outfit.cover_image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={outfit.cover_image}
+                      alt={outfit.name || "community outfit"}
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-widest text-white/40">
+                      No image
+                    </div>
+                  )}
+                </div>
+                <div className="pt-2 space-y-1">
+                  <p className="text-[12px] uppercase text-white/88 line-clamp-1">
+                    {outfit.name || "Untitled outfit"}
+                  </p>
+                  <p className="text-[10px] uppercase text-white/45 line-clamp-1">
+                    {outfit.display_name ? `by ${outfit.display_name}` : "community look"}
+                  </p>
+                </div>
+              </button>
+            ))}
           </div>
-        ) : null}
-      </div>
+        </div>
+      )}
     </section>
   );
 }

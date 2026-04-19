@@ -124,7 +124,7 @@ export function LookbookPanel({
         ))}
 
         {!loading && outfits.length === 0 && !error ? (
-          <div className="col-span-2 text-xs text-white/50 border border-white/10 px-3 py-6 text-center">
+          <div className="col-span-full flex min-h-[14rem] items-center justify-center text-xs text-white/50 border border-white/10 px-3 py-6 text-center">
             No saved outfits yet. Wear some pieces, then hit &quot;Save Outfit&quot;.
           </div>
         ) : null}

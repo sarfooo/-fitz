@@ -11,6 +11,7 @@ HOUSE_STYLE = (
     "neutral calm expression, natural realistic skin texture and hair detail, "
     "very dark near-black seamless studio backdrop with no visible floor line, "
     "deep black charcoal environment with only a faint soft shadow halo behind the subject, "
+    "clean isolated subject silhouette against the backdrop for easy background removal, "
     "no gray wall, no bright gradient, no visible room edges, "
     "soft even key light with subtle rim light, crisp fabric texture, realistic folds and drape, "
     "accurate layering and believable garment weight, 50mm lens look, "

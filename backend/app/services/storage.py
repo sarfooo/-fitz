@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import base64
+from io import BytesIO
 import uuid
 from dataclasses import dataclass
 
 import httpx
+import cv2
+import numpy as np
+from PIL import Image
 
 from app.config import get_settings
 from app.services.image_gen import GeneratedImage
@@ -31,6 +35,49 @@ async def _resolve_bytes(image: GeneratedImage) -> bytes:
             r.raise_for_status()
             return r.content
     raise ValueError("GeneratedImage has neither b64_json nor url")
+
+
+def _render_to_transparent_png(data: bytes) -> bytes:
+    """Remove the near-black studio backdrop and return a transparent PNG.
+
+    Renders are generated with the subject centered on a dark background. We
+    identify only the dark region connected to the outer canvas edges, so dark
+    garments in the middle are preserved.
+    """
+    with Image.open(BytesIO(data)) as opened:
+        rgba = opened.convert("RGBA")
+
+    rgb = np.array(rgba)[..., :3]
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+
+    dark_mask = (gray < 54).astype(np.uint8)
+    h, w = dark_mask.shape
+
+    background = np.zeros((h, w), dtype=np.uint8)
+    if dark_mask[0, :].any():
+        background[0, dark_mask[0, :] == 1] = 1
+    if dark_mask[-1, :].any():
+        background[-1, dark_mask[-1, :] == 1] = 1
+    if dark_mask[:, 0].any():
+        background[dark_mask[:, 0] == 1, 0] = 1
+    if dark_mask[:, -1].any():
+        background[dark_mask[:, -1] == 1, -1] = 1
+
+    grown = background.copy()
+    previous_sum = -1
+    kernel = np.ones((3, 3), dtype=np.uint8)
+    while int(grown.sum()) != previous_sum:
+        previous_sum = int(grown.sum())
+        expanded = cv2.dilate(grown, kernel, iterations=1)
+        grown = np.where((expanded == 1) & (dark_mask == 1), 1, 0).astype(np.uint8)
+
+    alpha = np.where(grown == 1, 0, 255).astype(np.uint8)
+    alpha = cv2.GaussianBlur(alpha, (0, 0), sigmaX=1.2, sigmaY=1.2)
+
+    out = np.dstack([rgb, alpha])
+    output = BytesIO()
+    Image.fromarray(out, mode="RGBA").save(output, format="PNG")
+    return output.getvalue()
 
 
 async def upload_generated(
@@ -62,8 +109,15 @@ async def upload_avatar(image: GeneratedImage, *, user_id: str) -> StoredImage:
 
 async def upload_render(image: GeneratedImage, *, user_id: str) -> StoredImage:
     s = get_settings()
+    data = await _resolve_bytes(image)
+    transparent_png = _render_to_transparent_png(data)
+    processed = GeneratedImage(url=None, b64_json=base64.b64encode(transparent_png).decode("ascii"))
     return await upload_generated(
-        image, bucket=s.supabase_bucket_renders, path_prefix=f"user/{user_id}"
+        processed,
+        bucket=s.supabase_bucket_renders,
+        path_prefix=f"user/{user_id}",
+        content_type="image/png",
+        ext="png",
     )
 
 

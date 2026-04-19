@@ -2,18 +2,44 @@
 
 import type { MouseEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { AvatarSetupModal } from "@/components/dashboard/AvatarSetupModal";
 import { ClosetPanel } from "@/components/dashboard/ClosetPanel";
 import { CommunityPanel } from "@/components/dashboard/CommunityPanel";
 import { LookbookPanel } from "@/components/dashboard/LookbookPanel";
 import { MarketplacePanel, type MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
+import { SuggestionsPanel } from "@/components/dashboard/SuggestionsPanel";
 import { TaskBar } from "@/components/dashboard/TaskBar";
 import { TopBar, type TopBarView } from "@/components/dashboard/TopBar";
 import { TryOnPanel } from "@/components/dashboard/TryOnPanel";
 import { type AvatarIdentity, type SavedOutfit, fetchCurrentAvatar } from "@/lib/api/backend";
 
 export type WornItems = MarketplaceItem[];
+
+type SuggestionSignalKind = "viewed" | "worn" | "checkout";
+
+type SuggestionSignals = Record<SuggestionSignalKind, MarketplaceItem[]>;
+
+const SIGNALS_STORAGE_KEY = "fitz-suggestion-signals-v1";
+const CHECKOUT_STORAGE_KEY = "fitz-checkout-selection-v1";
+
+const EMPTY_SIGNALS: SuggestionSignals = {
+  viewed: [],
+  worn: [],
+  checkout: [],
+};
+
+function mergeUniqueItems(items: MarketplaceItem[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) {
+      return false;
+    }
+    seen.add(item.id);
+    return true;
+  });
+}
 
 interface DashboardShellProps {
   user: {
@@ -25,14 +51,44 @@ interface DashboardShellProps {
 }
 
 export function DashboardShell({ user, accessToken = null }: DashboardShellProps) {
+  const router = useRouter();
   const [activeView, setActiveView] = useState<TopBarView>("home");
   const [selectedItem, setSelectedItem] = useState<MarketplaceItem | null>(null);
+  const [selectedItemOrigin, setSelectedItemOrigin] = useState<"marketplace" | "external" | null>(
+    null
+  );
   const [wornItems, setWornItems] = useState<WornItems>([]);
   const [avatar, setAvatar] = useState<AvatarIdentity | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const [lookbookRefresh, setLookbookRefresh] = useState(0);
   const [closetVersion, setClosetVersion] = useState(0);
   const [outfitPreviewImage, setOutfitPreviewImage] = useState<string | null>(null);
+  const [suggestionSignals, setSuggestionSignals] = useState<SuggestionSignals>(() => {
+    if (typeof window === "undefined") {
+      return EMPTY_SIGNALS;
+    }
+
+    const rawSignals = window.localStorage.getItem(SIGNALS_STORAGE_KEY);
+    if (!rawSignals) {
+      return EMPTY_SIGNALS;
+    }
+
+    try {
+      const parsed = JSON.parse(rawSignals) as Partial<SuggestionSignals>;
+      return {
+        viewed: Array.isArray(parsed.viewed) ? parsed.viewed : [],
+        worn: Array.isArray(parsed.worn) ? parsed.worn : [],
+        checkout: Array.isArray(parsed.checkout) ? parsed.checkout : [],
+      };
+    } catch {
+      window.localStorage.removeItem(SIGNALS_STORAGE_KEY);
+      return EMPTY_SIGNALS;
+    }
+  });
+
+  useEffect(() => {
+    window.localStorage.setItem(SIGNALS_STORAGE_KEY, JSON.stringify(suggestionSignals));
+  }, [suggestionSignals]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -56,17 +112,39 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
     };
   }, [accessToken]);
 
-  const handleSelectItem = useCallback((item: MarketplaceItem | null) => {
-    setSelectedItem(item);
+  const trackItems = useCallback((kind: SuggestionSignalKind, items: MarketplaceItem[]) => {
+    if (items.length === 0) {
+      return;
+    }
+
+    setSuggestionSignals((current) => ({
+      ...current,
+      [kind]: mergeUniqueItems([...items, ...current[kind]]).slice(0, 24),
+    }));
   }, []);
 
-  const handleWearItem = useCallback((item: MarketplaceItem) => {
-    setWornItems((current) =>
-      current.some((existing) => existing.id === item.id)
-        ? current.filter((existing) => existing.id !== item.id)
-        : [...current, item]
-    );
-  }, []);
+  const handleSelectItem = useCallback(
+    (item: MarketplaceItem | null) => {
+      setSelectedItem(item);
+      setSelectedItemOrigin(item ? "marketplace" : null);
+      if (item) {
+        trackItems("viewed", [item]);
+      }
+    },
+    [trackItems]
+  );
+
+  const handleWearItem = useCallback(
+    (item: MarketplaceItem) => {
+      setWornItems((current) =>
+        current.some((existing) => existing.id === item.id)
+          ? current.filter((existing) => existing.id !== item.id)
+          : [...current, item]
+      );
+      trackItems("worn", [item]);
+    },
+    [trackItems]
+  );
 
   const handleRemoveItem = useCallback((itemId: string) => {
     setWornItems((current) => current.filter((item) => item.id !== itemId));
@@ -105,10 +183,43 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
     setClosetVersion((current) => current + 1);
   }, []);
 
-  const handleClosetSelectItem = useCallback((item: MarketplaceItem) => {
-    setSelectedItem(item);
-    setActiveView("home");
-  }, []);
+  const handleClosetSelectItem = useCallback(
+    (item: MarketplaceItem) => {
+      setSelectedItem(item);
+      setSelectedItemOrigin("external");
+      setActiveView("home");
+      trackItems("viewed", [item]);
+    },
+    [trackItems]
+  );
+
+  const handleWearClosetItems = useCallback(
+    (items: MarketplaceItem[]) => {
+      if (items.length === 0) {
+        return;
+      }
+
+      setWornItems((current) => mergeUniqueItems([...current, ...items]));
+      setSelectedItem(items[items.length - 1] ?? null);
+      setSelectedItemOrigin("external");
+      setActiveView("home");
+      trackItems("worn", items);
+    },
+    [trackItems]
+  );
+
+  const handleCheckoutItems = useCallback(
+    (items: MarketplaceItem[]) => {
+      if (items.length === 0) {
+        return;
+      }
+
+      window.sessionStorage.setItem(CHECKOUT_STORAGE_KEY, JSON.stringify(items));
+      trackItems("checkout", items);
+      router.push("/checkout");
+    },
+    [router, trackItems]
+  );
 
   const handleSelectOutfit = useCallback((outfit: SavedOutfit) => {
     const restoredItems: MarketplaceItem[] = outfit.items.map((item) => ({
@@ -124,6 +235,7 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
 
     setWornItems(restoredItems);
     setSelectedItem(null);
+    setSelectedItemOrigin(null);
     setOutfitPreviewImage(outfit.cover_image ?? null);
     setActiveView("home");
   }, []);
@@ -131,6 +243,7 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
   const handleSelectCommunityOutfit = useCallback((items: MarketplaceItem[]) => {
     setWornItems(items);
     setSelectedItem(null);
+    setSelectedItemOrigin(null);
     setActiveView("home");
   }, []);
 
@@ -150,6 +263,7 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
       }
 
       setSelectedItem(null);
+      setSelectedItemOrigin(null);
     },
     [activeView, selectedItem]
   );
@@ -174,6 +288,7 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 p-4 flex-1 min-h-0 overflow-hidden">
           <MarketplacePanel
             selectedItemId={selectedItem?.id ?? null}
+            selectedItemOrigin={selectedItemOrigin}
             onSelectItem={handleSelectItem}
           />
           <TryOnPanel
@@ -201,6 +316,8 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
             accessToken={accessToken}
             version={closetVersion}
             onSelectItem={handleClosetSelectItem}
+            onWearItems={handleWearClosetItems}
+            onCheckoutItems={handleCheckoutItems}
           />
         </div>
       ) : null}
@@ -220,6 +337,22 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
           <CommunityPanel
             accessToken={accessToken}
             onSelectOutfit={handleSelectCommunityOutfit}
+          />
+        </div>
+      ) : null}
+
+      {activeView === "suggestions" ? (
+        <div className="p-4 flex-1 min-h-0 overflow-hidden">
+          <SuggestionsPanel
+            accessToken={accessToken}
+            signals={suggestionSignals}
+            onSelectItem={(item) => {
+              setSelectedItem(item);
+              setSelectedItemOrigin("external");
+              setActiveView("home");
+              trackItems("viewed", [item]);
+            }}
+            onClosetSaved={handleClosetSaved}
           />
         </div>
       ) : null}

@@ -33,11 +33,13 @@ function mapBrowseItem(item: BrowseItem): MarketplaceItem {
 
 interface MarketplacePanelProps {
   selectedItemId?: string | null;
+  selectedItemOrigin?: "marketplace" | "external" | null;
   onSelectItem?: (item: MarketplaceItem | null) => void;
 }
 
 export function MarketplacePanel({
   selectedItemId = null,
+  selectedItemOrigin = null,
   onSelectItem,
 }: MarketplacePanelProps) {
   const [query, setQuery] = useState("vetements");
@@ -70,7 +72,11 @@ export function MarketplacePanel({
         if (!cancelled) {
           const nextItems = data.items.map(mapBrowseItem);
           setItems(nextItems);
-          if (selectedItemId && !nextItems.some((item) => item.id === selectedItemId)) {
+          if (
+            selectedItemId &&
+            selectedItemOrigin === "marketplace" &&
+            !nextItems.some((item) => item.id === selectedItemId)
+          ) {
             onSelectItem?.(null);
           }
         }
@@ -91,7 +97,7 @@ export function MarketplacePanel({
     return () => {
       cancelled = true;
     };
-  }, [onSelectItem, page, selectedItemId, submittedQuery]);
+  }, [onSelectItem, page, selectedItemId, selectedItemOrigin, submittedQuery]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
