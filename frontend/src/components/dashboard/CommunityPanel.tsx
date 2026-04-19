@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 
 import type { MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
+import { OutfitDetailModal } from "@/components/dashboard/OutfitDetailModal";
 import { fetchCommunityOutfits, type CommunityOutfit } from "@/lib/api/backend";
 
 interface CommunityPanelProps {
@@ -57,6 +58,7 @@ export function CommunityPanel({ accessToken, onSelectOutfit }: CommunityPanelPr
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
+  const [selectedOutfit, setSelectedOutfit] = useState<CommunityOutfit | null>(null);
 
   useEffect(() => {
     if (!accessToken) {
@@ -192,7 +194,7 @@ export function CommunityPanel({ accessToken, onSelectOutfit }: CommunityPanelPr
               <button
                 key={outfit.id}
                 type="button"
-                onClick={() => onSelectOutfit?.(mapCommunityOutfitItems(outfit))}
+                onClick={() => setSelectedOutfit(outfit)}
                 className="group w-48 shrink-0 text-left rounded-lg border border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(15,9,22,0.94)_0%,rgba(7,4,12,0.98)_100%)] p-2 hover:border-[color:var(--color-fc-hot)] transition-colors"
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -230,6 +232,15 @@ export function CommunityPanel({ accessToken, onSelectOutfit }: CommunityPanelPr
           </div>
         </div>
       )}
+
+      <OutfitDetailModal
+        outfit={selectedOutfit}
+        onClose={() => setSelectedOutfit(null)}
+        onShowInTryOn={(outfit) => {
+          setSelectedOutfit(null);
+          onSelectOutfit?.(mapCommunityOutfitItems(outfit as CommunityOutfit));
+        }}
+      />
     </section>
   );
 }
