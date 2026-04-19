@@ -17,7 +17,7 @@ import { type AvatarIdentity, type SavedOutfit, fetchCurrentAvatar } from "@/lib
 
 export type WornItems = MarketplaceItem[];
 
-type SuggestionSignalKind = "viewed" | "worn" | "checkout";
+type SuggestionSignalKind = "viewed" | "worn" | "closet" | "checkout";
 
 type SuggestionSignals = Record<SuggestionSignalKind, MarketplaceItem[]>;
 
@@ -27,6 +27,7 @@ const CHECKOUT_STORAGE_KEY = "fitz-checkout-selection-v1";
 const EMPTY_SIGNALS: SuggestionSignals = {
   viewed: [],
   worn: [],
+  closet: [],
   checkout: [],
 };
 
@@ -62,6 +63,7 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
   const [setupOpen, setSetupOpen] = useState(false);
   const [lookbookRefresh, setLookbookRefresh] = useState(0);
   const [closetVersion, setClosetVersion] = useState(0);
+  const [communityRefresh, setCommunityRefresh] = useState(0);
   const [outfitPreviewImage, setOutfitPreviewImage] = useState<string | null>(null);
   const [suggestionSignals, setSuggestionSignals] = useState<SuggestionSignals>(() => {
     if (typeof window === "undefined") {
@@ -78,6 +80,7 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
       return {
         viewed: Array.isArray(parsed.viewed) ? parsed.viewed : [],
         worn: Array.isArray(parsed.worn) ? parsed.worn : [],
+        closet: Array.isArray(parsed.closet) ? parsed.closet : [],
         checkout: Array.isArray(parsed.checkout) ? parsed.checkout : [],
       };
     } catch {
@@ -183,6 +186,21 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
     setClosetVersion((current) => current + 1);
   }, []);
 
+  const handleTrackClosetItems = useCallback(
+    (items: MarketplaceItem[]) => {
+      trackItems("closet", items);
+      setClosetVersion((current) => current + 1);
+    },
+    [trackItems]
+  );
+
+  const handleNavigate = useCallback((view: TopBarView) => {
+    setActiveView(view);
+    if (view === "community") {
+      setCommunityRefresh((current) => current + 1);
+    }
+  }, []);
+
   const handleClosetSelectItem = useCallback(
     (item: MarketplaceItem) => {
       setSelectedItem(item);
@@ -281,7 +299,7 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
         displayName={user.displayName}
         avatarUrl={canvasAvatarUrl}
         active={activeView}
-        onNavigate={setActiveView}
+        onNavigate={handleNavigate}
         onUpdateAvatar={handleOpenSetup}
       />
 
@@ -307,6 +325,8 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
             onRequestAvatarSetup={handleOpenSetup}
             onFitSaved={handleFitSaved}
             onClosetSaved={handleClosetSaved}
+            onClosetItemsTracked={handleTrackClosetItems}
+            closetVersion={closetVersion}
           />
         </div>
       ) : null}
@@ -336,6 +356,7 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
       {activeView === "community" ? (
         <div className="p-4 flex-1 min-h-0 overflow-hidden">
           <CommunityPanel
+            key={communityRefresh}
             accessToken={accessToken}
             onSelectOutfit={handleSelectCommunityOutfit}
           />

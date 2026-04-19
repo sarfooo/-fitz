@@ -1,7 +1,7 @@
 "use client";
 
 import type { MouseEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useState } from "react";
 import { Link2, Sparkles } from "lucide-react";
 
 import type { MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
@@ -13,6 +13,7 @@ interface SuggestionsPanelProps {
   signals: {
     viewed: MarketplaceItem[];
     worn: MarketplaceItem[];
+    closet: MarketplaceItem[];
     checkout: MarketplaceItem[];
   };
   onSelectItem?: (item: MarketplaceItem) => void;
@@ -32,6 +33,16 @@ const STOP_WORDS = new Set([
   "women",
   "womens",
   "menswear",
+  "tops",
+  "bottoms",
+  "outerwear",
+  "accessories",
+  "footwear",
+  "jewelry",
+  "clothing",
+  "closet",
+  "outfit",
+  "fits",
 ]);
 
 function pickSuggestionKeywords(items: MarketplaceItem[]) {
@@ -54,6 +65,31 @@ function pickSuggestionKeywords(items: MarketplaceItem[]) {
     .map(([term]) => term);
 }
 
+function extractItemKeywords(item: MarketplaceItem) {
+  return `${item.name} ${item.category ?? ""}`
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter((part) => part.length > 2 && !STOP_WORDS.has(part))
+    .slice(0, 3);
+}
+
+function mergeRecentItems(groups: MarketplaceItem[][]) {
+  const seen = new Set<string>();
+  const merged: MarketplaceItem[] = [];
+
+  groups.forEach((group) => {
+    group.forEach((item) => {
+      if (seen.has(item.id)) {
+        return;
+      }
+      seen.add(item.id);
+      merged.push(item);
+    });
+  });
+
+  return merged;
+}
+
 export function SuggestionsPanel({
   accessToken = null,
   signals,
@@ -61,18 +97,38 @@ export function SuggestionsPanel({
   onClosetSaved,
 }: SuggestionsPanelProps) {
   const [results, setResults] = useState<MarketplaceItem[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isSavingSelected, setIsSavingSelected] = useState(false);
 
   const sourceItems = useMemo(
-    () => [...signals.checkout, ...signals.worn, ...signals.viewed],
+    () =>
+      mergeRecentItems([
+        signals.viewed.slice(0, 6),
+        signals.closet.slice(0, 4),
+        signals.worn.slice(0, 4),
+        signals.checkout.slice(0, 4),
+      ]),
     [signals]
   );
+  const sourceSignature = useMemo(
+    () => sourceItems.map((item) => `${item.id}:${item.name}:${item.category ?? ""}`).join("|"),
+    [sourceItems]
+  );
   const keywordTerms = useMemo(() => pickSuggestionKeywords(sourceItems), [sourceItems]);
-  const defaultQuery = keywordTerms.join(" ");
-  const activeQuery = defaultQuery;
+  const queryCandidates = useMemo(() => {
+    const ordered = [
+      ...sourceItems.flatMap((item) => {
+        const terms = extractItemKeywords(item);
+        return [terms.slice(0, 2).join(" "), terms.join(" ")].filter(Boolean);
+      }),
+      keywordTerms.slice(0, 2).join(" "),
+      keywordTerms.join(" "),
+    ];
+
+    return [...new Set(ordered.map((query) => query.trim()).filter(Boolean))];
+  }, [keywordTerms, sourceItems]);
+  const activeQuery = queryCandidates[0] ?? "";
   const visibleResults = useMemo(() => (activeQuery ? results : []), [activeQuery, results]);
   const visibleError = activeQuery ? error : null;
   const selectedItems = useMemo(
@@ -87,34 +143,38 @@ export function SuggestionsPanel({
     }
 
     let cancelled = false;
+    startTransition(() => {
+      setSelectedIds([]);
+      setError(null);
+    });
 
     void (async () => {
-      setLoading(true);
-      setError(null);
       try {
-        const response = await fetchBrowseItems(activeQuery);
+        let nextResults: MarketplaceItem[] = [];
+
+        for (const query of queryCandidates) {
+          const response = await fetchBrowseItems(query);
+          nextResults = response.items.map((item) => ({
+            id: item.listing_id,
+            source: item.source.toUpperCase(),
+            name: item.item_name,
+            price: item.price,
+            category: item.category,
+            size: item.size,
+            imageUrl: item.image,
+            productUrl: item.product_url,
+          }));
+          if (nextResults.length > 0) {
+            break;
+          }
+        }
+
         if (!cancelled) {
-          setResults(
-            response.items.map((item) => ({
-              id: item.listing_id,
-              source: item.source.toUpperCase(),
-              name: item.item_name,
-              price: item.price,
-              category: item.category,
-              size: item.size,
-              imageUrl: item.image,
-              productUrl: item.product_url,
-            }))
-          );
+          setResults(nextResults);
         }
       } catch (err: unknown) {
         if (!cancelled) {
-          setResults([]);
           setError(err instanceof Error ? err.message : "Couldn’t load suggestions right now.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
         }
       }
     })();
@@ -122,7 +182,7 @@ export function SuggestionsPanel({
     return () => {
       cancelled = true;
     };
-  }, [activeQuery]);
+  }, [activeQuery, queryCandidates, sourceSignature]);
 
   async function handleSaveSelected() {
     if (!accessToken || selectedItems.length === 0 || isSavingSelected) {
@@ -240,7 +300,7 @@ export function SuggestionsPanel({
 
       <div className="flex items-center justify-between text-[13px] uppercase tracking-[0.08em] text-white/45">
         <span>{activeQuery ? `Auto suggestions for ${activeQuery}` : "Suggested pieces"}</span>
-        <span>{loading ? "Loading..." : `${visibleResults.length} items`}</span>
+        <span>{`${visibleResults.length} items`}</span>
       </div>
 
       <ScrollReel

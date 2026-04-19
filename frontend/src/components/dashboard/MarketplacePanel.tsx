@@ -13,6 +13,7 @@ export interface MarketplaceItem {
   category?: string | null;
   size?: string | null;
   imageUrl?: string | null;
+  photos?: string[];
   productUrl?: string | null;
 }
 
@@ -27,6 +28,7 @@ function mapBrowseItem(item: BrowseItem): MarketplaceItem {
     category: item.category,
     size: item.size,
     imageUrl: item.image,
+    photos: item.photos ?? [],
     productUrl: item.product_url,
   };
 }
@@ -72,13 +74,6 @@ export function MarketplacePanel({
         if (!cancelled) {
           const nextItems = data.items.map(mapBrowseItem);
           setItems(nextItems);
-          if (
-            selectedItemId &&
-            selectedItemOrigin === "marketplace" &&
-            !nextItems.some((item) => item.id === selectedItemId)
-          ) {
-            onSelectItem?.(null);
-          }
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -97,7 +92,17 @@ export function MarketplacePanel({
     return () => {
       cancelled = true;
     };
-  }, [onSelectItem, page, selectedItemId, selectedItemOrigin, submittedQuery]);
+  }, [page, submittedQuery]);
+
+  useEffect(() => {
+    if (
+      selectedItemId &&
+      selectedItemOrigin === "marketplace" &&
+      !items.some((item) => item.id === selectedItemId)
+    ) {
+      onSelectItem?.(null);
+    }
+  }, [items, onSelectItem, selectedItemId, selectedItemOrigin]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

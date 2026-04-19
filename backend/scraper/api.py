@@ -55,3 +55,40 @@ class GrailedAPI:
             print(f"Error querying Grailed: {exception}")
             return None
         
+    def get_listing_path(self, item_id: str):
+        try:
+            pass
+            response = self.session.get(f"https://www.grailed.com/listings/{item_id}")
+            if response.status_code != 301:
+                return None
+            
+            path = response.headers["Location"]
+            if "listings" not in path:
+                return None
+
+            return path     
+
+        except Exception as exception:
+            print(f"Error querying Grailed: {exception}")
+            return None
+
+        
+    def get_listing(self, item_id: str):
+        try:
+            path = self.get_listing_path(item_id)
+            if not path:
+                return None
+
+            response = self.session.get(f"https://www.grailed.com{path}")
+            return helper.extract_listing_item_from_html(
+                response.text,
+                item_id = item_id,
+                product_url = f"https://www.grailed.com{path}",
+            )
+
+        except Exception as exception:
+            print(f"Error querying Grailed: {exception}")
+            return None
+        
+if __name__ == "__main__":
+    print(GrailedAPI().get_listing("95602777"))

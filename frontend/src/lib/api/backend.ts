@@ -4,6 +4,7 @@ export interface BrowseItem {
   price: number | null;
   size: string | null;
   image: string | null;
+  photos: string[];
   category: string | null;
   source: string;
   product_url: string | null;
@@ -120,6 +121,15 @@ export async function fetchBrowseItems(query: string, page = 0) {
   });
 
   return parseJson<BrowseResponse>(response);
+}
+
+export async function fetchBrowseListing(itemId: string) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/browse/listing/${itemId}`, {
+    cache: "no-store",
+  });
+
+  return parseJson<BrowseItem>(response);
 }
 
 export async function fetchClosetItems(accessToken: string) {

@@ -9,6 +9,8 @@ import { ScrollReel } from "@/components/ui/ScrollReel";
 import {
   addClosetItem,
   addOutfit,
+  fetchBrowseListing,
+  fetchClosetItems,
   generateFit,
   generateMoreAngles,
   getRenderStatus,
@@ -29,6 +31,8 @@ interface TryOnPanelProps {
   onRequestAvatarSetup?: () => void;
   onFitSaved?: () => void;
   onClosetSaved?: () => void;
+  onClosetItemsTracked?: (items: MarketplaceItem[]) => void;
+  closetVersion?: number;
 }
 
 type Mode = "base" | "rendered";
@@ -48,6 +52,8 @@ export function TryOnPanel({
   onRequestAvatarSetup,
   onFitSaved,
   onClosetSaved,
+  onClosetItemsTracked,
+  closetVersion = 0,
 }: TryOnPanelProps) {
   const [mode, setMode] = useState<Mode>("base");
   const [renderedImages, setRenderedImages] = useState<string[]>([]);
@@ -244,6 +250,7 @@ export function TryOnPanel({
     );
 
     onClosetSaved?.();
+    onClosetItemsTracked?.(wornItems);
     return savedItems;
   }
 
@@ -461,6 +468,7 @@ export function TryOnPanel({
               accessToken={accessToken ?? null}
               onWearItem={onWearItem}
               onClosetSaved={onClosetSaved}
+              closetVersion={closetVersion}
             />
           </div>
         </div>
@@ -578,16 +586,19 @@ function CurrentItemCard({
   accessToken,
   onWearItem,
   onClosetSaved,
+  closetVersion,
 }: {
   item?: MarketplaceItem | null;
   wornItems: WornItems;
   accessToken: string | null;
   onWearItem: (item: MarketplaceItem) => void;
   onClosetSaved?: () => void;
+  closetVersion: number;
 }) {
   const [isSavingToCloset, setIsSavingToCloset] = useState(false);
-  const [closetSavedItemId, setClosetSavedItemId] = useState<string | null>(null);
   const [closetError, setClosetError] = useState<string | null>(null);
+  const [listingPhotos, setListingPhotos] = useState<string[]>([]);
+  const [closetListingIds, setClosetListingIds] = useState<Set<string>>(new Set());
 
   const hasSelectedItem = Boolean(item);
   const normalizedSize = item?.size
@@ -596,6 +607,80 @@ function CurrentItemCard({
   const isWearingSelectedItem = Boolean(
     item && wornItems.some((wornItem) => wornItem.id === item.id)
   );
+  const galleryPhotos = listingPhotos.length > 0
+    ? listingPhotos
+    : item?.photos?.length
+    ? item.photos
+    : item?.imageUrl
+    ? [item.imageUrl]
+    : [];
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadListingPhotos() {
+      if (!item?.id || item.source.toLowerCase() !== "grailed") {
+        setListingPhotos([]);
+        return;
+      }
+
+      if (item.photos && item.photos.length > 0) {
+        setListingPhotos(item.photos);
+        return;
+      }
+
+      try {
+        const listing = await fetchBrowseListing(item.id);
+        if (!cancelled) {
+          const nextPhotos =
+            listing.photos.length > 0
+              ? listing.photos
+              : listing.image
+              ? [listing.image]
+              : [];
+          setListingPhotos(nextPhotos);
+        }
+      } catch {
+        if (!cancelled) {
+          setListingPhotos(item.imageUrl ? [item.imageUrl] : []);
+        }
+      }
+    }
+
+    void loadListingPhotos();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [item]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadClosetState() {
+      if (!accessToken) {
+        setClosetListingIds(new Set());
+        return;
+      }
+
+      try {
+        const response = await fetchClosetItems(accessToken);
+        if (!cancelled) {
+          setClosetListingIds(new Set(response.items.map((closetItem) => closetItem.listing_id)));
+        }
+      } catch {
+        if (!cancelled) {
+          setClosetListingIds(new Set());
+        }
+      }
+    }
+
+    void loadClosetState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, closetVersion]);
 
   async function handleAddToCloset() {
     if (!item || isSavingToCloset) {
@@ -620,7 +705,7 @@ function CurrentItemCard({
         source: item.source.toLowerCase(),
         product_url: item.productUrl ?? null,
       });
-      setClosetSavedItemId(item.id);
+      setClosetListingIds((current) => new Set([...current, item.id]));
       onClosetSaved?.();
     } catch (err: unknown) {
       setClosetError(err instanceof Error ? err.message : "Failed to save item.");
@@ -629,55 +714,80 @@ function CurrentItemCard({
     }
   }
 
-  const isSavedToCloset = Boolean(item && closetSavedItemId === item.id);
+  const isSavedToCloset = Boolean(item && closetListingIds.has(item.id));
 
   return (
-    <div className="w-full rounded-[6px] border border-[rgba(255,255,255,0.08)] bg-[linear-gradient(180deg,rgba(19,10,28,0.96)_0%,rgba(10,6,16,0.98)_100%)] px-4 py-4 shadow-[0_0_0_1px_rgba(255,38,185,0.08),0_20px_45px_rgba(0,0,0,0.45)]">
+    <div className="w-full rounded-[6px] border border-[rgba(255,255,255,0.08)] bg-[linear-gradient(180deg,rgba(19,10,28,0.96)_0%,rgba(10,6,16,0.98)_100%)] px-4 py-3 shadow-[0_0_0_1px_rgba(255,38,185,0.08),0_20px_45px_rgba(0,0,0,0.45)]">
       <p
         className="text-[0.95rem] tracking-[0.1em] neon-pink uppercase"
         style={{ fontFamily: "var(--font-pixel)" }}
       >
         Current item
       </p>
-      <div className="mt-3 space-y-2">
+      {galleryPhotos.length > 0 ? (
+        <div className="mt-3">
+          <ScrollReel
+            className="w-full"
+            trackClassName="gap-2 pb-1"
+            ariaLabel="current item gallery"
+          >
+            {galleryPhotos.map((photoUrl, index) => (
+              <div
+                key={`${photoUrl}-${index}`}
+                className="h-20 w-20 shrink-0 snap-start overflow-hidden rounded-sm border border-[color:var(--color-fc-border)] bg-white/5"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photoUrl}
+                  alt={`${item?.name ?? "current item"} photo ${index + 1}`}
+                  className="h-full w-full object-cover bg-neutral-100"
+                />
+              </div>
+            ))}
+          </ScrollReel>
+        </div>
+      ) : null}
+      <div className="mt-2 space-y-1.5">
         <p
-          className="text-[1.1rem] leading-6 text-white/82 break-words"
+          className="text-[1rem] leading-5 text-white/82 break-words"
           style={{ fontFamily: "var(--font-pixel)" }}
         >
           {item?.name ?? "Pick an item from marketplace"}
         </p>
       </div>
-      <div className="mt-4 h-px bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.14)_16%,rgba(255,255,255,0.14)_84%,transparent_100%)]" />
+      <div className="mt-3 h-px bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.14)_16%,rgba(255,255,255,0.14)_84%,transparent_100%)]" />
       <div
-        className="mt-3 flex items-center justify-between text-[1.2rem]"
+        className="mt-2.5 flex items-center justify-between text-[1.05rem]"
         style={{ fontFamily: "var(--font-pixel)" }}
       >
         <span className="text-white/65">SIZE:</span>
         <span className="text-white uppercase">{normalizedSize}</span>
       </div>
-      <div className="mt-3 h-px bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.14)_16%,rgba(255,255,255,0.14)_84%,transparent_100%)]" />
+      <div className="mt-2.5 h-px bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.14)_16%,rgba(255,255,255,0.14)_84%,transparent_100%)]" />
       <div
-        className="mt-3 flex items-center justify-between text-[1.2rem]"
+        className="mt-2.5 flex items-center justify-between text-[1.05rem]"
         style={{ fontFamily: "var(--font-pixel)" }}
       >
         <span className="text-white/65">PRICE:</span>
         <span className="text-white">{item?.price != null ? `$${item.price}` : "--"}</span>
       </div>
-      <div className="mt-6 flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={handleAddToCloset}
-          disabled={!hasSelectedItem}
-          className="w-full border border-[#ff7ddd] bg-[linear-gradient(180deg,#f06ddd_0%,#d957ce_100%)] px-4 py-3 text-[1.2rem] uppercase text-[#22061e] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_0_18px_rgba(255,38,185,0.18)] disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ fontFamily: "var(--font-pixel)" }}
-        >
-          {isSavingToCloset ? "Saving..." : isSavedToCloset ? "Added to closet" : "Add to closet"}
-        </button>
+      <div className="mt-4 flex flex-col gap-2.5">
+        {!isSavedToCloset ? (
+          <button
+            type="button"
+            onClick={handleAddToCloset}
+            disabled={!hasSelectedItem}
+            className="w-full border border-[#ff7ddd] bg-[linear-gradient(180deg,#f06ddd_0%,#d957ce_100%)] px-4 py-2.5 text-[1.05rem] uppercase text-[#22061e] shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_0_18px_rgba(255,38,185,0.18)] disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ fontFamily: "var(--font-pixel)" }}
+          >
+            {isSavingToCloset ? "Saving..." : "Add to closet"}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => item && onWearItem(item)}
           disabled={!hasSelectedItem}
-          className="w-full border border-white/22 bg-transparent px-4 py-3 text-[1.05rem] uppercase text-white/88 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full border border-white/22 bg-transparent px-4 py-2.5 text-[0.95rem] uppercase text-white/88 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ fontFamily: "var(--font-pixel)" }}
         >
           {isWearingSelectedItem ? "Remove item" : "Wear item"}

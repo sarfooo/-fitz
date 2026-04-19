@@ -207,7 +207,7 @@ export function ClosetPanel({
           Items you save from marketplace will show up here.
         </div>
       ) : (
-        <div className="overflow-x-auto overflow-y-hidden pb-2">
+        <div className="overflow-x-auto overflow-y-hidden pb-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex gap-3 min-w-max">
             {closetItems.map((item) => (
               <div

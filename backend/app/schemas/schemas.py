@@ -13,6 +13,7 @@ class Item(BaseModel):
     price: int | None = None
     size: str | None = None
     image: str | None = None
+    photos: list[str] = Field(default_factory=list)
     category: str | None = None
     source: str = "grailed"
     product_url: str | None = None
