@@ -1,15 +1,9 @@
 # FitCheck production stack.
-# Runs the FastAPI backend behind Caddy (auto-TLS via Let's Encrypt).
-# Intended to be deployed to a single VPS (Hostinger KVM 1 or similar).
+# Runs the Next.js frontend and FastAPI backend directly on public ports so
+# the app can coexist with an existing reverse proxy on the host.
 #
 # Usage:
 #   docker compose up -d --build
-#
-# Required on the host:
-#   - /opt/fitcheck/.env  (mounted into the backend container)
-#   - DNS A record: api.myfitz.us -> VPS public IP
-#
-# Caddy handles TLS automatically on first request once DNS resolves.
 
 services:
   frontend:
@@ -23,8 +17,8 @@ services:
     image: fitcheck-frontend:latest
     container_name: fitcheck-frontend
     restart: unless-stopped
-    expose:
-      - "3005"
+    ports:
+      - "3005:3005"
     depends_on:
       - backend
     logging:
@@ -42,8 +36,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
-    expose:
-      - "8000"
+    ports:
+      - "8001:8000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 30s
@@ -55,27 +49,3 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-  caddy:
-    image: caddy:2-alpine
-    container_name: fitcheck-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - frontend
-      - backend
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-volumes:
-  caddy_data:
-  caddy_config:
