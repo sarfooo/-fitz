@@ -47,6 +47,15 @@ export interface SavedOutfitsResponse {
   outfits: SavedOutfit[];
 }
 
+export interface CommunityOutfit extends SavedOutfit {
+  username: string;
+  display_name: string | null;
+}
+
+export interface CommunityOutfitsResponse {
+  outfits: CommunityOutfit[];
+}
+
 export interface AddSavedOutfitRequest {
   name: string;
   closet_item_ids: string[];
@@ -135,6 +144,18 @@ export async function fetchOutfits(accessToken: string) {
   });
 
   return parseJson<SavedOutfitsResponse>(response);
+}
+
+export async function fetchCommunityOutfits(accessToken: string) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/outfits/community`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  });
+
+  return parseJson<CommunityOutfitsResponse>(response);
 }
 
 export async function addOutfit(accessToken: string, payload: AddSavedOutfitRequest) {

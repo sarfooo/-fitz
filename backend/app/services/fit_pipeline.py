@@ -29,13 +29,28 @@ GARMENT_INSTRUCTION = (
     "Describe this single {kind} garment for a fashion try-on prompt. Cover: "
     "primary color and any secondary colors, fabric and visible texture, cut/fit "
     "(fitted, relaxed, baggy, oversized), length, notable details (graphics, "
-    "patterns, washes, stitching, hardware, collar/neckline, sleeves, hem). "
-    "2-3 dense sentences, no person, no background, no guesses about brand."
+    "patterns, washes, stitching, hardware, collar/neckline, sleeves, hem), "
+    "where it sits on the body, and whether it should be inner layer, outer layer, "
+    "footwear, bag, or accessory. Be specific about logos, graphics, distressing, "
+    "and silhouette. 2-4 dense sentences, no person, no background, no guesses about brand."
 )
 
 UNSELECTED_GARMENT_RULES = (
     "Only use the selected garments described below. Do not invent extra tops, "
     "pants, skirts, jackets, shoes, bags, or accessories that were not selected."
+)
+
+GARMENT_FIDELITY_RULES = (
+    "Preserve each selected garment faithfully: keep the exact garment type, category, "
+    "dominant color, visible graphics, wash, distressing, hardware, proportions, and "
+    "overall silhouette. Do not simplify statement pieces into plain basics."
+)
+
+OUTFIT_COMPOSITION_RULES = (
+    "All selected garments must appear in the final image at the same time unless two "
+    "selected pieces are physically impossible to wear together. If layering is needed, "
+    "place each garment in the most natural realistic order while keeping every selected "
+    "piece visible enough to be recognized."
 )
 
 
@@ -99,8 +114,12 @@ def build_fit_prompt(
             f"Identity reference: {identity}",
             "Render that same person wearing all of the following selected garments together as one cohesive outfit:",
             *garment_lines,
+            f"There are exactly {len(garment_descs)} selected garments. Keep all {len(garment_descs)} present in the final outfit.",
             "Do not omit any selected garment. If any selected garment is footwear, a bag, or an accessory, place it naturally and correctly on the person.",
+            GARMENT_FIDELITY_RULES,
+            OUTFIT_COMPOSITION_RULES,
             UNSELECTED_GARMENT_RULES,
+            "Keep the person's pose simple and front-facing so the outfit is easy to inspect.",
             "preserve the described face, hair, skin tone, build, and proportions exactly.",
             "Use the same dark FitCheck site backdrop: almost pure black, softly vignetted, "
             "with only a very subtle shadow glow behind the body and no light gray studio wash.",
@@ -144,7 +163,7 @@ async def render_fit_image(prompt: str, *, size: str = "1024x1024") -> Generated
         raw = await client.images.generate(
             prompt=prompt,
             size=size,
-            quality="medium",
+            quality="high",
             model="openai/gpt-image-1",
         )
     images = _unwrap(raw)

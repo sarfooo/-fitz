@@ -118,6 +118,15 @@ class AddSavedOutfitResponse(BaseModel):
     outfit: SavedOutfit
 
 
+class CommunityOutfit(SavedOutfit):
+    username: str
+    display_name: str | None = None
+
+
+class CommunityOutfitsResponse(BaseModel):
+    outfits: list[CommunityOutfit]
+
+
 class DeleteSavedOutfitResponse(BaseModel):
     success: bool
     outfit_id: str

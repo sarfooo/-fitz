@@ -57,6 +57,38 @@ def list_outfits(user_id: str):
     return response.data or []
 
 
+def list_community_outfits(current_user_id: str, limit: int = 24):
+    sb = get_supabase()
+    response = (
+        sb.table("saved_outfits")
+        .select("*, saved_outfit_items(closet_item_id, closet_items(*))")
+        .neq("user_id", current_user_id)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    outfits = response.data or []
+    if not outfits:
+        return []
+
+    user_ids = list({row["user_id"] for row in outfits if row.get("user_id")})
+    profiles_by_user_id = {}
+    if user_ids:
+        profiles_response = (
+            sb.table("profiles")
+            .select("user_id, username, display_name")
+            .in_("user_id", user_ids)
+            .execute()
+        )
+        profiles = profiles_response.data or []
+        profiles_by_user_id = {profile["user_id"]: profile for profile in profiles}
+
+    for row in outfits:
+        row["profiles"] = profiles_by_user_id.get(row.get("user_id"))
+
+    return outfits
+
+
 def create_outfit(user_id: str, name: str, closet_item_ids: list[str], cover_image: str | None):
     sb = get_supabase()
     if closet_item_ids:

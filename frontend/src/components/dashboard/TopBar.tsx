@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/client";
 
-export type TopBarView = "home" | "closet" | "lookbook" | "suggestions";
+export type TopBarView = "home" | "closet" | "lookbook" | "community";
 
 interface TopBarProps {
   username: string;
@@ -21,7 +21,7 @@ const NAV_ITEMS: Array<{ id: TopBarView; label: string }> = [
   { id: "home", label: "HOME" },
   { id: "closet", label: "CLOSET" },
   { id: "lookbook", label: "OUTFITS" },
-  { id: "suggestions", label: "SUGGESTIONS" },
+  { id: "community", label: "COMMUNITY" },
 ];
 
 export function TopBar({

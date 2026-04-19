@@ -12,14 +12,18 @@ HOUSE_STYLE = (
     "very dark near-black seamless studio backdrop with no visible floor line, "
     "deep black charcoal environment with only a faint soft shadow halo behind the subject, "
     "no gray wall, no bright gradient, no visible room edges, "
-    "soft even key light with subtle rim light, crisp fabric texture, 50mm lens look, "
+    "soft even key light with subtle rim light, crisp fabric texture, realistic folds and drape, "
+    "accurate layering and believable garment weight, 50mm lens look, "
     "cohesive FitCheck editorial visual identity"
 )
 
 NEGATIVE = (
     "no watermark, no text, no logo overlay, no cartoon, no illustration, "
     "no 3D render look, no plastic skin, no distorted anatomy, no extra limbs, "
-    "no blurry face, no cropping of head or feet, no props, no background objects"
+    "no blurry face, no cropping of head or feet, no props, no background objects, "
+    "do not swap garments, do not merge garments together, do not remove graphics, "
+    "do not change garment colors, do not invent missing pieces, do not turn tops into dresses, "
+    "do not turn shoes into pants or shirts, do not replace selected items with generic basics"
 )
 
 

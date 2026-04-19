@@ -4,12 +4,14 @@ from app.deps.auth import get_current_user_id
 from app.schemas.schemas import (
     AddSavedOutfitResponse,
     ClosetItem,
+    CommunityOutfit,
+    CommunityOutfitsResponse,
     DeleteSavedOutfitResponse,
     OutfitCreateRequest,
     SavedOutfit,
     SavedOutfitsResponse,
 )
-from app.services.closet import create_outfit, delete_outfit, list_outfits
+from app.services.closet import create_outfit, delete_outfit, list_community_outfits, list_outfits
 
 
 router = APIRouter(prefix="/outfits", tags=["outfits"])
@@ -38,11 +40,31 @@ def normalize_outfit(row):
     )
 
 
+def normalize_community_outfit(row):
+    outfit = normalize_outfit(row)
+    profile = row.get("profiles") or {}
+    username = profile.get("username") or "community"
+    display_name = profile.get("display_name")
+
+    return CommunityOutfit(
+        **outfit.model_dump(),
+        username=username,
+        display_name=display_name,
+    )
+
+
 @router.get("", response_model=SavedOutfitsResponse)
 def get_outfits(user_id: str = Depends(get_current_user_id)):
     rows = list_outfits(user_id)
     outfits = [normalize_outfit(row) for row in rows]
     return SavedOutfitsResponse(outfits=outfits)
+
+
+@router.get("/community", response_model=CommunityOutfitsResponse)
+def get_community_outfits(user_id: str = Depends(get_current_user_id)):
+    rows = list_community_outfits(user_id)
+    outfits = [normalize_community_outfit(row) for row in rows]
+    return CommunityOutfitsResponse(outfits=outfits)
 
 
 @router.post("", response_model=AddSavedOutfitResponse)

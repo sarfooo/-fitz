@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AvatarSetupModal } from "@/components/dashboard/AvatarSetupModal";
 import { ClosetPanel } from "@/components/dashboard/ClosetPanel";
+import { CommunityPanel } from "@/components/dashboard/CommunityPanel";
 import { LookbookPanel } from "@/components/dashboard/LookbookPanel";
 import { MarketplacePanel, type MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
 import { TaskBar } from "@/components/dashboard/TaskBar";
@@ -127,6 +128,12 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
     setActiveView("home");
   }, []);
 
+  const handleSelectCommunityOutfit = useCallback((items: MarketplaceItem[]) => {
+    setWornItems(items);
+    setSelectedItem(null);
+    setActiveView("home");
+  }, []);
+
   const handleHomeClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
       if (activeView !== "home" || !selectedItem) {
@@ -208,51 +215,12 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
         </div>
       ) : null}
 
-      {activeView === "suggestions" ? (
+      {activeView === "community" ? (
         <div className="p-4 flex-1 min-h-0 overflow-hidden">
-          <section className="y2k-window p-5 flex h-full flex-col gap-4 overflow-hidden">
-            <div className="flex items-center justify-between gap-4">
-              <h2
-                className="neon-pink text-[24px] leading-none tracking-[0.12em] uppercase"
-                style={{ fontFamily: "var(--font-pixel)" }}
-              >
-                Suggested Outfits
-              </h2>
-              <p className="text-sm uppercase text-white/45">
-                Community-inspired looks
-              </p>
-            </div>
-
-            <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 md:grid-cols-3">
-              {[
-                {
-                  title: "Late-night layers",
-                  note: "Baggy hoodie, washed denim, chunky sneakers.",
-                },
-                {
-                  title: "Downtown monochrome",
-                  note: "Heavy black outerwear with stacked basics.",
-                },
-                {
-                  title: "Archive grunge",
-                  note: "Distressed knit, faded jeans, worn-in boots.",
-                },
-              ].map((suggestion) => (
-                <div
-                  key={suggestion.title}
-                  className="flex flex-col justify-end rounded-sm border border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(15,9,22,0.94)_0%,rgba(7,4,12,0.98)_100%)] p-4"
-                >
-                  <div className="mb-16 aspect-[4/5] rounded-sm border border-white/10 bg-[radial-gradient(circle_at_50%_20%,rgba(255,255,255,0.05),rgba(0,0,0,0)_45%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))]" />
-                  <p className="text-[13px] uppercase text-white/90">{suggestion.title}</p>
-                  <p className="mt-2 text-sm leading-5 text-white/55">{suggestion.note}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="border border-white/10 bg-black/20 px-4 py-3 text-sm text-white/50">
-              This tab is ready for other-user outfit suggestions next.
-            </div>
-          </section>
+          <CommunityPanel
+            accessToken={accessToken}
+            onSelectOutfit={handleSelectCommunityOutfit}
+          />
         </div>
       ) : null}
 
