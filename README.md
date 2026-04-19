@@ -29,7 +29,7 @@ The first version is deliberately image-based, not 3D cloth simulation. The goal
 - **Body Profile** — photos + height/weight/sizes/fit preference
 - **Virtual Try-On** — render a specific Grailed item on your avatar
 - **Closet & Lookbook** — save items, save full outfits, browse community looks
-- **Credits** — renders cost credits; new users start with a few free
+
 
 ---
 
@@ -73,7 +73,7 @@ codex.md      Original product brief
 - **Backend** — FastAPI, Pydantic, httpx
 - **Data + Auth + Storage** — Supabase (Postgres + Storage + Auth), with row-level security
 - **AI** — image generation APIs for avatar + try-on rendering
-- **Scraping** — Grailed via Algolia-backed search
+- **API** — Grailed via Algolia-backed search
 - **Infra** — Docker Compose + Caddy (auto-TLS) on a single VPS
 
 ---
@@ -131,4 +131,3 @@ The product claim is a *personalized, directionally accurate preview* — not a 
 3. **Backend + persistence** — schema, auth, storage, API endpoints
 4. **AI integration** — body profile, garment analysis, try-on rendering
 
-See `codex.md` for the full brief.
