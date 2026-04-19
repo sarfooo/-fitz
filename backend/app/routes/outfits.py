@@ -1,3 +1,6 @@
+from time import monotonic
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.deps.auth import get_current_user_id
@@ -17,6 +20,10 @@ from app.services.storage import signed_url_for
 
 
 router = APIRouter(prefix="/outfits", tags=["outfits"])
+
+_COMMUNITY_CACHE_TTL_SECONDS = 300
+_community_cache: dict[str, tuple[float, CommunityOutfitsResponse]] = {}
+_AUTO_USERNAME_RE = re.compile(r"^user_[a-f0-9]{6,}$", re.IGNORECASE)
 
 
 _ANGLE_ORDER: tuple[str, ...] = (
@@ -94,14 +101,25 @@ def normalize_outfit(row):
 def normalize_community_outfit(row):
     outfit = normalize_outfit(row)
     profile = row.get("profiles") or {}
-    username = profile.get("username") or "community"
+    raw_username = (profile.get("username") or "").strip()
     display_name = profile.get("display_name")
+    username = raw_username or "community"
+
+    if _AUTO_USERNAME_RE.match(username):
+        if isinstance(display_name, str) and display_name.strip():
+            username = display_name.strip()
+        else:
+            username = "community"
 
     return CommunityOutfit(
         **outfit.model_dump(),
         username=username,
         display_name=display_name,
     )
+
+
+def _clear_community_cache() -> None:
+    _community_cache.clear()
 
 
 @router.get("", response_model=SavedOutfitsResponse)
@@ -113,9 +131,16 @@ def get_outfits(user_id: str = Depends(get_current_user_id)):
 
 @router.get("/community", response_model=CommunityOutfitsResponse)
 def get_community_outfits(user_id: str = Depends(get_current_user_id)):
+    cached = _community_cache.get(user_id)
+    now = monotonic()
+    if cached and now - cached[0] < _COMMUNITY_CACHE_TTL_SECONDS:
+      return cached[1]
+
     rows = list_community_outfits(user_id)
     outfits = [normalize_community_outfit(row) for row in rows]
-    return CommunityOutfitsResponse(outfits=outfits)
+    response = CommunityOutfitsResponse(outfits=outfits)
+    _community_cache[user_id] = (now, response)
+    return response
 
 
 @router.post("", response_model=AddSavedOutfitResponse)
@@ -132,6 +157,7 @@ def add_outfit(
     )
     if row is None:
         raise HTTPException(status_code=400, detail="Failed to create outfit")
+    _clear_community_cache()
     return AddSavedOutfitResponse(
         success=True,
         outfit=normalize_outfit(row),
@@ -144,6 +170,8 @@ def remove_outfit(
     user_id: str = Depends(get_current_user_id),
 ):
     success = delete_outfit(user_id, outfit_id)
+    if success:
+        _clear_community_cache()
     return DeleteSavedOutfitResponse(
         success=success,
         outfit_id=outfit_id,

@@ -1,4 +1,67 @@
+import re
+
 from app.services.supabase_client import get_supabase
+
+
+_AUTO_USERNAME_RE = re.compile(r"^user_[a-f0-9]{6,}$", re.IGNORECASE)
+
+
+def _extract_auth_metadata_username(admin_response) -> str | None:
+    if admin_response is None:
+        return None
+
+    auth_user = getattr(admin_response, "user", None)
+    if auth_user is None:
+        data = getattr(admin_response, "data", None)
+        if isinstance(data, dict):
+            auth_user = data.get("user") or data
+        else:
+            auth_user = data
+
+    if auth_user is None:
+        return None
+
+    if isinstance(auth_user, dict):
+        metadata = auth_user.get("user_metadata") or auth_user.get("raw_user_meta_data") or {}
+    else:
+        metadata = (
+            getattr(auth_user, "user_metadata", None)
+            or getattr(auth_user, "raw_user_meta_data", None)
+            or {}
+        )
+
+    username = metadata.get("username") if isinstance(metadata, dict) else None
+    if isinstance(username, str) and username.strip():
+        return username.strip()
+    return None
+
+
+def _backfill_profile_username_if_needed(sb, profile: dict | None, user_id: str) -> dict | None:
+    profile = profile or {}
+    current_username = (profile.get("username") or "").strip()
+    if current_username and not _AUTO_USERNAME_RE.match(current_username):
+        return profile
+
+    try:
+        admin_response = sb.auth.admin.get_user_by_id(user_id)
+        metadata_username = _extract_auth_metadata_username(admin_response)
+        if not metadata_username:
+            return profile
+
+        profile["username"] = metadata_username
+        try:
+            (
+                sb.table("profiles")
+                .update({"username": metadata_username})
+                .eq("user_id", user_id)
+                .execute()
+            )
+        except Exception:
+            pass
+    except Exception:
+        return profile
+
+    return profile
 
 
 def list_closet_items(user_id: str):
@@ -90,7 +153,12 @@ def list_community_outfits(current_user_id: str, limit: int = 24):
         profiles_by_user_id = {profile["user_id"]: profile for profile in profiles}
 
     for row in outfits:
-        row["profiles"] = profiles_by_user_id.get(row.get("user_id"))
+        profile = profiles_by_user_id.get(row.get("user_id"))
+        row["profiles"] = _backfill_profile_username_if_needed(
+            sb,
+            profile,
+            row.get("user_id"),
+        )
 
     return outfits
 
