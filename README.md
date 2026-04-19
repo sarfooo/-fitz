@@ -1,8 +1,8 @@
-# FitCheck
+# Fitz
 
 Virtual try-on for archive and secondhand fashion. Users build a body profile, generate a personalized avatar, and preview how clothing from marketplaces like Grailed and Mercari will look on their body before buying.
 
-> FitCheck gives shoppers a personalized, directionally accurate preview of how a piece may look on their body — without leaving the couch.
+> Fitz gives shoppers a personalized, directionally accurate preview of how a piece may look on their body — without leaving the couch.
 
 ---
 
