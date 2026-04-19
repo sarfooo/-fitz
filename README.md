@@ -139,4 +139,3 @@ docker compose up -d --build
 - **Phase 3 — Backend & persistence** — full schema, auth, storage, API endpoints
 - **Phase 4 — AI integration** — body profile processing, garment analysis, try-on rendering, recs
 
-See `codex.md` for the full product brief.
