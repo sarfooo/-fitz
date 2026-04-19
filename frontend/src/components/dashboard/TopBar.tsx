@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -128,12 +127,10 @@ export function TopBar({
         >
           <div className="relative w-10 h-10 rounded overflow-hidden bg-[color:var(--color-fc-panel)]">
             {avatarUrl ? (
-              <Image
+              <img
                 src={avatarUrl}
-                fill
-                sizes="40px"
                 alt="avatar"
-                className="object-cover object-top scale-[2.6] origin-top"
+                className="h-full w-full object-cover object-top scale-[2.6] origin-top"
                 style={{ objectPosition: "center top" }}
               />
             ) : (
