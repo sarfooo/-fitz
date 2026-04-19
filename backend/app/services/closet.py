@@ -45,11 +45,17 @@ def delete_closet_item(user_id: str, closet_item_id: str):
     return bool(response.data)
 
 
+_OUTFITS_SELECT = (
+    "*, saved_outfit_items(closet_item_id, closet_items(*)), "
+    "try_on_renders(id, render_angles(angle, image_path, bucket))"
+)
+
+
 def list_outfits(user_id: str):
     sb = get_supabase()
     response = (
         sb.table("saved_outfits")
-        .select("*, saved_outfit_items(closet_item_id, closet_items(*))")
+        .select(_OUTFITS_SELECT)
         .eq("user_id", user_id)
         .order("created_at", desc=True)
         .execute()
@@ -61,7 +67,7 @@ def list_community_outfits(current_user_id: str, limit: int = 24):
     sb = get_supabase()
     response = (
         sb.table("saved_outfits")
-        .select("*, saved_outfit_items(closet_item_id, closet_items(*))")
+        .select(_OUTFITS_SELECT)
         .neq("user_id", current_user_id)
         .order("created_at", desc=True)
         .limit(limit)
@@ -89,7 +95,13 @@ def list_community_outfits(current_user_id: str, limit: int = 24):
     return outfits
 
 
-def create_outfit(user_id: str, name: str, closet_item_ids: list[str], cover_image: str | None):
+def create_outfit(
+    user_id: str,
+    name: str,
+    closet_item_ids: list[str],
+    cover_image: str | None,
+    render_id: str | None = None,
+):
     sb = get_supabase()
     if closet_item_ids:
         owned_items = (
@@ -110,6 +122,7 @@ def create_outfit(user_id: str, name: str, closet_item_ids: list[str], cover_ima
                 "user_id": user_id,
                 "name": name,
                 "cover_image": cover_image,
+                "render_id": render_id,
             }
         )
         .execute()
@@ -127,7 +140,7 @@ def create_outfit(user_id: str, name: str, closet_item_ids: list[str], cover_ima
 
     response = (
         sb.table("saved_outfits")
-        .select("*, saved_outfit_items(closet_item_id, closet_items(*))")
+        .select(_OUTFITS_SELECT)
         .eq("id", outfit["id"])
         .maybe_single()
         .execute()

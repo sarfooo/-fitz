@@ -8,13 +8,60 @@ from app.schemas.schemas import (
     CommunityOutfitsResponse,
     DeleteSavedOutfitResponse,
     OutfitCreateRequest,
+    RenderAngleOut,
     SavedOutfit,
     SavedOutfitsResponse,
 )
 from app.services.closet import create_outfit, delete_outfit, list_community_outfits, list_outfits
+from app.services.storage import signed_url_for
 
 
 router = APIRouter(prefix="/outfits", tags=["outfits"])
+
+
+_ANGLE_ORDER: tuple[str, ...] = (
+    "left",
+    "left_three_quarter",
+    "front",
+    "right_three_quarter",
+    "right",
+)
+
+
+def _angle_sort_key(angle_name: str) -> int:
+    try:
+        return _ANGLE_ORDER.index(angle_name)
+    except ValueError:
+        return len(_ANGLE_ORDER)
+
+
+def _build_angles_from_render(render_row: dict | None) -> list[RenderAngleOut]:
+    if render_row is None:
+        return []
+    raw = render_row.get("render_angles") or []
+    ordered = sorted(
+        raw,
+        key=lambda a: _angle_sort_key(a.get("angle") or ""),
+    )
+    outs: list[RenderAngleOut] = []
+    for row in ordered:
+        bucket = row.get("bucket")
+        path = row.get("image_path")
+        signed: str | None = None
+        if bucket and path:
+            try:
+                signed = signed_url_for(bucket=bucket, path=path)
+            except Exception:
+                signed = None
+        outs.append(
+            RenderAngleOut(
+                angle=row.get("angle") or "front",
+                image_url=signed,
+                storage_path=path,
+                bucket=bucket,
+            )
+        )
+    return outs
 
 
 def normalize_outfit(row):
@@ -29,6 +76,8 @@ def normalize_outfit(row):
     if cover_image is None and items:
         cover_image = items[0].image
 
+    angles = _build_angles_from_render(row.get("try_on_renders"))
+
     return SavedOutfit(
         id=row["id"],
         user_id=row["user_id"],
@@ -37,6 +86,8 @@ def normalize_outfit(row):
         cover_image=cover_image,
         created_at=row["created_at"],
         items=items,
+        render_id=row.get("render_id"),
+        angles=angles,
     )
 
 
@@ -77,6 +128,7 @@ def add_outfit(
         name=request.name,
         closet_item_ids=request.closet_item_ids,
         cover_image=request.cover_image,
+        render_id=request.render_id,
     )
     if row is None:
         raise HTTPException(status_code=400, detail="Failed to create outfit")
