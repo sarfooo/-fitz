@@ -193,18 +193,27 @@ async def render_fit_image(prompt: str, *, size: str = "1024x1024") -> Generated
 # prompt redundantly describes a person whose image is already attached.
 
 BANANA_AVATAR_PROMPT = (
-    "A full-body photograph of the person shown in the reference images. "
-    "Framing: head-to-toe, centered, facing the camera straight-on, arms "
-    "relaxed at sides, neutral expression, simple standing pose. "
+    "A full-length fashion lookbook photograph of the person shown in the "
+    "reference images. This is NOT a portrait or half-body shot — the full "
+    "figure from the top of the head down to the soles of the shoes must be "
+    "visible inside the frame, with generous equal margin above the head and "
+    "below the shoes. Do not crop the head, hands, or feet. "
+    "Framing: subject vertically centered in the frame, facing the camera "
+    "straight-on, arms relaxed at sides, legs shoulder-width apart, neutral "
+    "expression, simple standing pose. The feet and shoes must be completely "
+    "visible. "
     "Wearing a plain fitted neutral base layer — a solid light gray crew-neck "
-    "t-shirt and matching plain pants. No logos, no patterns, no accessories. "
+    "t-shirt, matching plain pants, and simple plain sneakers. No logos, no "
+    "patterns, no accessories. "
     "Backdrop: a near-black seamless studio backdrop, softly vignetted, with "
     "a subtle shadow glow behind the body and no visible floor line. "
     "Lighting: soft, even, slightly directional from the front, preserving "
     "natural skin texture. "
     "The subject's face, features, hair, skin tone, and build must exactly "
     "match the person in the reference photos — this is the same person. "
-    "Do not idealize, stylize, or beautify. "
+    "Do not idealize, stylize, or beautify. The reference photos may be "
+    "cropped selfies or portraits — ignore their cropping and re-frame as a "
+    "full-length standing shot. "
     "Photorealistic, natural skin texture, no cartoon, no illustration."
 )
 
