@@ -150,9 +150,23 @@ def load_latest_identity(user_id: str) -> dict[str, Any] | None:
 
 
 def download_avatar_bytes(bucket: str, path: str) -> tuple[bytes, str]:
-    """Pull the generated avatar PNG back out of Supabase storage."""
+    """Pull the generated avatar PNG back out of Supabase storage (sync)."""
     sb = get_supabase()
     data = sb.storage.from_(bucket).download(path)
+    mime = _detect_mime(data, fallback="image/png")
+    return data, mime
+
+
+async def adownload_avatar_bytes(bucket: str, path: str) -> tuple[bytes, str]:
+    """Async avatar fetch — uses a signed URL + httpx so the 5s sync SDK
+    timeout doesn't hit us, and so we never block the event loop."""
+    from app.services.storage import signed_url_for
+
+    url = signed_url_for(bucket=bucket, path=path)
+    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as http:
+        r = await http.get(url)
+        r.raise_for_status()
+        data = r.content
     mime = _detect_mime(data, fallback="image/png")
     return data, mime
 
@@ -170,6 +184,148 @@ async def render_fit_image(prompt: str, *, size: str = "1024x1024") -> Generated
     if not images:
         raise RuntimeError("Dedalus returned no images")
     return images[0]
+
+
+# Banana 2 (Gemini 3.1 Flash Image) prompts are tuned differently from
+# gpt-image-1. The avatar and garment images are passed in as pixel references,
+# so the text prompt describes *what changes* (backdrop, pose, composition)
+# rather than re-describing the subject. Identity drift is worst when the text
+# prompt redundantly describes a person whose image is already attached.
+
+BANANA_AVATAR_PROMPT = (
+    "A full-body photograph of the person shown in the reference images. "
+    "Framing: head-to-toe, centered, facing the camera straight-on, arms "
+    "relaxed at sides, neutral expression, simple standing pose. "
+    "Wearing a plain fitted neutral base layer — a solid light gray crew-neck "
+    "t-shirt and matching plain pants. No logos, no patterns, no accessories. "
+    "Backdrop: a near-black seamless studio backdrop, softly vignetted, with "
+    "a subtle shadow glow behind the body and no visible floor line. "
+    "Lighting: soft, even, slightly directional from the front, preserving "
+    "natural skin texture. "
+    "The subject's face, features, hair, skin tone, and build must exactly "
+    "match the person in the reference photos — this is the same person. "
+    "Do not idealize, stylize, or beautify. "
+    "Photorealistic, natural skin texture, no cartoon, no illustration."
+)
+
+
+ANGLE_LABELS: tuple[str, ...] = (
+    "left",
+    "left_three_quarter",
+    "right_three_quarter",
+    "right",
+)
+
+
+_ANGLE_CAMERA_DIRECTION: dict[str, str] = {
+    "left": (
+        "A full LEFT-side profile photograph. The camera is positioned "
+        "directly to the subject's left. Visible: the subject's LEFT ear, "
+        "the LEFT half of their face in profile, the LEFT shoulder, LEFT "
+        "arm, LEFT hip, and the LEFT side of the torso and legs. The RIGHT "
+        "side of the body is entirely hidden behind the left side. This is "
+        "NOT a mirrored or horizontally flipped version of the right "
+        "profile — the subject has natural left/right asymmetries (hair "
+        "part, face shape, clothing details) that must remain consistent "
+        "with how the subject's left side genuinely looks."
+    ),
+    "left_three_quarter": (
+        "A three-quarter photograph from the subject's FRONT-LEFT. The "
+        "camera has moved roughly halfway between straight-on and the full "
+        "left profile. Most of the LEFT side of the face and body is "
+        "visible; a thin sliver of the right side of the nose and right "
+        "shoulder is also visible. The subject's LEFT ear and LEFT cheek "
+        "are prominent. This is NOT a mirror of the right three-quarter "
+        "view — asymmetries differ."
+    ),
+    "right_three_quarter": (
+        "A three-quarter photograph from the subject's FRONT-RIGHT. The "
+        "camera has moved roughly halfway between straight-on and the full "
+        "right profile. Most of the RIGHT side of the face and body is "
+        "visible; a thin sliver of the left side of the nose and left "
+        "shoulder is also visible. The subject's RIGHT ear and RIGHT cheek "
+        "are prominent. This is NOT a mirror of the left three-quarter "
+        "view — asymmetries differ."
+    ),
+    "right": (
+        "A full RIGHT-side profile photograph. The camera is positioned "
+        "directly to the subject's right. Visible: the subject's RIGHT "
+        "ear, the RIGHT half of their face in profile, the RIGHT shoulder, "
+        "RIGHT arm, RIGHT hip, and the RIGHT side of the torso and legs. "
+        "The LEFT side of the body is entirely hidden behind the right "
+        "side. This is NOT a mirrored or horizontally flipped version of "
+        "the left profile — the subject has natural left/right asymmetries "
+        "(hair part, face shape, clothing details) that must remain "
+        "consistent with how the subject's right side genuinely looks."
+    ),
+}
+
+
+def build_banana_angle_prompt(angle: str) -> str:
+    """Prompt for a side/3-quarter rendering derived from a front render.
+
+    The front render is passed as the single reference image — it anchors the
+    subject, outfit, and backdrop. The prompt only asks Banana to re-render
+    the exact same scene from a new camera angle.
+    """
+    direction = _ANGLE_CAMERA_DIRECTION.get(angle)
+    if direction is None:
+        raise ValueError(f"unsupported angle: {angle}")
+    return " ".join(
+        [
+            "Re-render the exact same person wearing the exact same outfit "
+            "shown in the reference image, but from a different camera angle:",
+            direction + ".",
+            "Preserve everything else exactly: the face, hair, skin tone, "
+            "build, every garment (colors, prints, hardware, cut, proportions), "
+            "the pose stance, the near-black seamless studio backdrop, the "
+            "soft vignette, and the lighting. This is the same moment of the "
+            "same shoot, captured by a second camera.",
+            "Framing: full-body, head to shoes, subject centered.",
+            "Photorealistic, natural skin texture. Do not add, remove, or "
+            "modify garments, accessories, or props.",
+        ]
+    )
+
+
+def build_banana_fit_prompt(garment_descs: list[str]) -> str:
+    """Compose a Banana 2 fit prompt.
+
+    The avatar is passed in as the first reference image (identity anchor) and
+    each garment follows in order. The text anchors references by position and
+    emphasizes preserving the garment pixels + avatar face.
+    """
+    garment_lines = [
+        f"Garment {index + 1}: {desc}"
+        for index, desc in enumerate(garment_descs)
+    ]
+    n = len(garment_descs)
+    return " ".join(
+        [
+            "A full-body photograph of the person from the first reference "
+            "image, dressed in the garments shown in the subsequent reference "
+            "images.",
+            f"There are exactly {n} selected garments and all {n} must appear "
+            "on the person in the final image.",
+            *garment_lines,
+            "Preserve each garment exactly as shown in its reference image — "
+            "same colors, graphics, prints, wash, cut, proportions, and "
+            "hardware. Do not simplify statement pieces into plain basics.",
+            "Layer the pieces in a natural realistic order so every garment "
+            "stays visible enough to recognize. If a piece is footwear, a "
+            "bag, or an accessory, place it correctly on the body.",
+            "Framing: full-body, head to shoes, subject centered, facing the "
+            "camera straight-on, arms relaxed at sides, simple pose.",
+            "Backdrop: a near-black seamless studio backdrop with a soft "
+            "vignette and a subtle shadow glow behind the body, no visible "
+            "floor line.",
+            "Preserve the face, hair, skin tone, and build of the person in "
+            "the first reference image exactly — this is the same person.",
+            "Photorealistic, natural skin texture. Do not add garments, "
+            "accessories, props, or backgrounds that are not shown in the "
+            "references.",
+        ]
+    )
 
 
 IDENTITY_INSTRUCTION = (

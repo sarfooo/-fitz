@@ -5,10 +5,12 @@ import { Camera, FolderHeart, RotateCcw, Shirt } from "lucide-react";
 
 import type { WornItems } from "@/components/dashboard/DashboardShell";
 import type { MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
+import { ScrollReel } from "@/components/ui/ScrollReel";
 import {
   addClosetItem,
   addOutfit,
   generateFit,
+  generateMoreAngles,
   getRenderStatus,
 } from "@/lib/api/backend";
 
@@ -48,15 +50,19 @@ export function TryOnPanel({
   onClosetSaved,
 }: TryOnPanelProps) {
   const [mode, setMode] = useState<Mode>("base");
-  const [renderedImage, setRenderedImage] = useState<string | null>(null);
+  const [renderedImages, setRenderedImages] = useState<string[]>([]);
+  const [renderId, setRenderId] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [isLoadingAngles, setIsLoadingAngles] = useState(false);
+  const [anglesError, setAnglesError] = useState<string | null>(null);
   const [isSavingClothes, setIsSavingClothes] = useState(false);
   const [isSavingOutfit, setIsSavingOutfit] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const pollAbortRef = useRef<{ cancelled: boolean } | null>(null);
+  const renderedImage = renderedImages[0] ?? null;
   const stageImage = renderedImage ?? previewImageUrl ?? avatarUrl ?? null;
   const downloadableImage = stageImage;
 
@@ -82,7 +88,9 @@ export function TryOnPanel({
   function handleResetView() {
     onResetOutfit();
     setMode("base");
-    setRenderedImage(null);
+    setRenderedImages([]);
+    setRenderId(null);
+    setAnglesError(null);
     setRenderError(null);
     setSaveMessage(null);
     setSaveError(null);
@@ -91,7 +99,9 @@ export function TryOnPanel({
 
   function handleResetToBaseImage() {
     setMode("base");
-    setRenderedImage(null);
+    setRenderedImages([]);
+    setRenderId(null);
+    setAnglesError(null);
     setRenderError(null);
     setSaveMessage(null);
     setSaveError(null);
@@ -115,9 +125,14 @@ export function TryOnPanel({
       try {
         const status = await getRenderStatus(token, renderId);
         if (status.status === "ready" && status.image?.signed_url) {
-          setRenderedImage(status.image.signed_url);
+          const urls = status.angles
+            .map((angle) => angle.image_url)
+            .filter((url): url is string => Boolean(url));
+          const ordered = urls.length > 0 ? urls : [status.image.signed_url];
+          setRenderedImages(ordered);
+          setRenderId(status.render_id);
           setMode("rendered");
-          onStageImageChange?.(status.image.signed_url);
+          onStageImageChange?.(ordered[0]);
           return;
         }
         if (status.status === "failed") {
@@ -155,7 +170,9 @@ export function TryOnPanel({
 
     setIsRendering(true);
     setElapsedMs(0);
-    setRenderedImage(null);
+    setRenderedImages([]);
+    setRenderId(null);
+    setAnglesError(null);
     setSaveMessage(null);
     setSaveError(null);
 
@@ -175,6 +192,29 @@ export function TryOnPanel({
       setRenderError(message);
     } finally {
       setIsRendering(false);
+    }
+  }
+
+  async function handleGetMoreAngles() {
+    if (!accessToken || !renderId || isLoadingAngles) return;
+    setAnglesError(null);
+    setIsLoadingAngles(true);
+    try {
+      const response = await generateMoreAngles(accessToken, renderId);
+      if (!response.success) {
+        setAnglesError(response.error || "Failed to generate more angles.");
+        return;
+      }
+      const urls = response.angles
+        .map((angle) => angle.image_url)
+        .filter((url): url is string => Boolean(url));
+      if (urls.length > 0) {
+        setRenderedImages(urls);
+      }
+    } catch (err: unknown) {
+      setAnglesError(err instanceof Error ? err.message : "Failed to generate more angles.");
+    } finally {
+      setIsLoadingAngles(false);
     }
   }
 
@@ -331,9 +371,22 @@ export function TryOnPanel({
         </aside>
 
         <div className="flex-1 relative flex items-end justify-center overflow-hidden rounded-lg bg-black/60 border border-[color:var(--color-fc-border)]">
-          {mode === "rendered" && renderedImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={renderedImage} alt="rendered outfit" className="h-full w-auto object-contain" />
+          {mode === "rendered" && renderedImages.length > 0 ? (
+            <ScrollReel
+              className="h-full w-full"
+              trackClassName="h-full items-end"
+              ariaLabel="rendered outfit angles"
+            >
+              {renderedImages.map((src, idx) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={`${src}-${idx}`}
+                  src={src}
+                  alt={`rendered outfit ${idx + 1}`}
+                  className="h-full w-full flex-shrink-0 snap-center object-contain"
+                />
+              ))}
+            </ScrollReel>
           ) : stageImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={stageImage} alt="your avatar" className="h-full w-auto object-contain" />
@@ -351,6 +404,24 @@ export function TryOnPanel({
           )}
 
           {isRendering ? <RenderingOverlay elapsedMs={elapsedMs} /> : null}
+
+          {mode === "rendered" && renderId && !isRendering && renderedImages.length < 5 ? (
+            <button
+              type="button"
+              onClick={() => void handleGetMoreAngles()}
+              disabled={isLoadingAngles}
+              className="absolute right-4 top-4 z-10 rounded-full border border-white/20 bg-black/70 px-3 py-1.5 text-[11px] uppercase tracking-[0.12em] text-white backdrop-blur hover:border-[color:var(--color-fc-hot)] disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{ fontFamily: "var(--font-pixel)" }}
+            >
+              {isLoadingAngles ? "Generating..." : "Get more angles"}
+            </button>
+          ) : null}
+
+          {anglesError ? (
+            <div className="absolute inset-x-4 top-14 z-10 rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+              {anglesError}
+            </div>
+          ) : null}
 
           {!isRendering && renderError ? (
             <div className="absolute inset-x-4 top-4 z-10 liquid-glass rounded-lg p-3 border border-rose-400/60 bg-rose-500/20">

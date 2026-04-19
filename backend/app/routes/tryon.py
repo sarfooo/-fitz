@@ -14,15 +14,22 @@ from app.schemas.schemas import (
     FitRequest,
     FitStartResponse,
     FitStatusResponse,
+    GenerateAnglesResponse,
     GeneratedImageOut,
     LookbookFit,
     LookbookResponse,
+    RenderAngleOut,
     SaveFitRequest,
     SaveFitResponse,
     TryOnGenerateRequest,
     TryOnResponse,
 )
+from app.services.banana import acompose_angle, acompose_fit
 from app.services.fit_pipeline import (
+    ANGLE_LABELS,
+    adownload_avatar_bytes,
+    build_banana_angle_prompt,
+    build_banana_fit_prompt,
     build_fit_prompt,
     describe_garment,
     describe_person_from_refs,
@@ -358,29 +365,38 @@ async def _run_fit_job(
     *,
     render_id: str,
     user_id: str,
-    identity: str,
+    avatar_bucket: str,
+    avatar_path: str,
     garments: list[tuple[str, str]],
     image_size: str,
 ) -> None:
-    """Background worker — identical recipe to scripts/gen_tryon.py.
+    """Background worker — Banana 2 multi-image compose.
 
-    1. Caption each garment with Gemini vision → garment descriptions.
-    2. Build prompt: identity + garment descs + HOUSE_STYLE + NEGATIVE.
-    3. gpt-image-1 text-to-image at 1024x1536 quality=high.
+    1. Download the stored avatar bytes (identity anchor).
+    2. Download + caption each garment image in parallel.
+    3. Build a Banana-native fit prompt and call nano banana 2 with avatar +
+       garment images as pixel references.
     """
     try:
-        garment_descs = await asyncio.gather(
-            *[
-                describe_garment(image_url, kind=label)
-                for image_url, label in garments
-            ]
+        avatar_bytes, avatar_mime = await adownload_avatar_bytes(avatar_bucket, avatar_path)
+
+        downloads, garment_descs = await asyncio.gather(
+            asyncio.gather(*[_download_garment(url) for url, _ in garments]),
+            asyncio.gather(
+                *[
+                    describe_garment(image_url, kind=label)
+                    for image_url, label in garments
+                ]
+            ),
         )
-        prompt = build_fit_prompt(
-            identity=identity,
-            garment_descs=list(garment_descs),
-        )
+        prompt = build_banana_fit_prompt(garment_descs=list(garment_descs))
         log.info("[tryon] fit prompt (render=%s): %s", render_id, prompt[:200])
-        image = await render_fit_image(prompt, size="1024x1536")
+        images = await acompose_fit(
+            avatar=(avatar_bytes, avatar_mime),
+            garments=list(downloads),
+            prompt=prompt,
+        )
+        image = images[0]
         stored = await upload_render(image, user_id=user_id)
         insert_render_angle(
             render_id=render_id,
@@ -419,11 +435,12 @@ async def generate_fit(
                 "photos before rendering a fit."
             ),
         )
-    identity = identity_row.get("identity_description") or ""
-    if not identity.strip():
+    avatar_bucket = identity_row.get("bucket")
+    avatar_path = identity_row.get("base_image_path")
+    if not avatar_bucket or not avatar_path:
         raise HTTPException(
             status_code=400,
-            detail="Your avatar has no identity description — re-run avatar setup.",
+            detail="Your avatar has no stored image — re-run avatar setup.",
         )
 
     row = insert_render(
@@ -442,7 +459,8 @@ async def generate_fit(
         _run_fit_job,
         render_id=render_id,
         user_id=user_id,
-        identity=identity,
+        avatar_bucket=avatar_bucket,
+        avatar_path=avatar_path,
         garments=[
             (
                 garment.image_url,
@@ -457,6 +475,48 @@ async def generate_fit(
     return FitStartResponse(render_id=render_id, status="pending")
 
 
+_ANGLE_ORDER: tuple[str, ...] = (
+    "left",
+    "left_three_quarter",
+    "front",
+    "right_three_quarter",
+    "right",
+)
+
+
+def _angle_sort_key(angle_name: str) -> int:
+    try:
+        return _ANGLE_ORDER.index(angle_name)
+    except ValueError:
+        return len(_ANGLE_ORDER)
+
+
+def _build_angle_outs(angle_rows: list[dict]) -> list[RenderAngleOut]:
+    ordered = sorted(
+        angle_rows,
+        key=lambda row: _angle_sort_key(row.get("angle") or ""),
+    )
+    outs: list[RenderAngleOut] = []
+    for row in ordered:
+        bucket = row.get("bucket")
+        path = row.get("image_path")
+        signed: str | None = None
+        if bucket and path:
+            try:
+                signed = signed_url_for(bucket=bucket, path=path)
+            except Exception:
+                signed = None
+        outs.append(
+            RenderAngleOut(
+                angle=row.get("angle") or "front",
+                image_url=signed,
+                storage_path=path,
+                bucket=bucket,
+            )
+        )
+    return outs
+
+
 @router.get("/render/{render_id}", response_model=FitStatusResponse)
 def get_render_status(
     render_id: str,
@@ -468,22 +528,16 @@ def get_render_status(
         raise HTTPException(status_code=404, detail="render not found")
 
     status = row.get("status") or "pending"
-    angles = row.get("render_angles") or []
+    angle_rows = row.get("render_angles") or []
+    angle_outs = _build_angle_outs(angle_rows) if status == "ready" else []
 
     image_out: GeneratedImageOut | None = None
-    if status == "ready" and angles:
-        angle = angles[0]
-        try:
-            signed = signed_url_for(bucket=angle["bucket"], path=angle["image_path"])
-        except Exception:
-            signed = None
+    if angle_outs:
+        first = angle_outs[0]
         image_out = GeneratedImageOut(
-            url=None,
-            b64_json=None,
-            revised_prompt=None,
-            storage_path=angle.get("image_path"),
-            bucket=angle.get("bucket"),
-            signed_url=signed,
+            storage_path=first.storage_path,
+            bucket=first.bucket,
+            signed_url=first.image_url,
         )
 
     error_msg = None
@@ -494,7 +548,91 @@ def get_render_status(
         render_id=render_id,
         status=status if status in {"pending", "ready", "failed"} else "pending",
         image=image_out,
+        angles=angle_outs,
         error=error_msg,
+    )
+
+
+async def _render_one_angle(
+    *,
+    render_id: str,
+    user_id: str,
+    angle: str,
+    front_bytes: bytes,
+    front_mime: str,
+) -> None:
+    prompt = build_banana_angle_prompt(angle)
+    images = await acompose_angle(
+        front=(front_bytes, front_mime),
+        prompt=prompt,
+    )
+    stored = await upload_render(images[0], user_id=user_id)
+    insert_render_angle(
+        render_id=render_id,
+        angle=angle,
+        storage_path=stored.path,
+        bucket=stored.bucket,
+    )
+
+
+@router.post("/render/{render_id}/angles", response_model=GenerateAnglesResponse)
+async def generate_additional_angles(
+    render_id: str,
+    user_id: str = Depends(get_current_user_id),
+) -> GenerateAnglesResponse:
+    """Generate left/left-3-4/right-3-4/right angles from the existing front render.
+
+    Uses the front render as a single reference image so the subject, outfit,
+    backdrop, and lighting stay consistent across all five views.
+    """
+    row = get_render_for_user(render_id, user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="render not found")
+    if (row.get("status") or "pending") != "ready":
+        raise HTTPException(status_code=400, detail="render is not ready yet")
+
+    angle_rows = row.get("render_angles") or []
+    front_row = next(
+        (a for a in angle_rows if (a.get("angle") or "") == "front"),
+        None,
+    )
+    if front_row is None:
+        raise HTTPException(status_code=400, detail="no front render to extend")
+
+    existing = {a.get("angle") for a in angle_rows}
+    to_generate = [label for label in ANGLE_LABELS if label not in existing]
+    if not to_generate:
+        return GenerateAnglesResponse(success=True, angles=_build_angle_outs(angle_rows))
+
+    try:
+        front_bytes, front_mime = await adownload_avatar_bytes(
+            front_row["bucket"], front_row["image_path"]
+        )
+    except Exception as exc:
+        log.exception("[tryon] failed to fetch front render for angles")
+        raise HTTPException(status_code=502, detail=f"failed to load front render: {exc}") from exc
+
+    try:
+        await asyncio.gather(
+            *[
+                _render_one_angle(
+                    render_id=render_id,
+                    user_id=user_id,
+                    angle=label,
+                    front_bytes=front_bytes,
+                    front_mime=front_mime,
+                )
+                for label in to_generate
+            ]
+        )
+    except Exception as exc:
+        log.exception("[tryon] angle generation failed for render %s", render_id)
+        return GenerateAnglesResponse(success=False, error=str(exc))
+
+    refreshed = get_render_for_user(render_id, user_id) or row
+    return GenerateAnglesResponse(
+        success=True,
+        angles=_build_angle_outs(refreshed.get("render_angles") or []),
     )
 
 
@@ -563,30 +701,20 @@ async def capture_avatar_identity(
     try:
         identity = await describe_person_from_refs(ref_tuples)
         log.info("[tryon] avatar: identity captured (%d chars)", len(identity))
-        # Build an avatar prompt that weaves the identity description into the
-        # FitCheck style. gpt-image-1 text-to-image renders the person described.
-        from app.services.prompts import HOUSE_STYLE, NEGATIVE
-        avatar_prompt = " ".join(
-            [
-                f"Portrait of a person matching this identity: {identity}",
-                "Full body shot, head to shoes, subject centered, facing camera straight-on, arms relaxed at sides, neutral expression.",
-                "wearing a plain fitted neutral base layer (simple crew-neck t-shirt and pants, solid neutral colors),",
-                "preserve the described face, hair, skin tone, build, and proportions exactly.",
-                HOUSE_STYLE + ".",
-                "Ultra-realistic, photographic, natural skin texture, no cartoon.",
-                NEGATIVE,
-            ]
+        # Banana 2 uses the reference photos as pixel anchors for face/body —
+        # the stored identity text is kept for downstream metadata, not fed
+        # back into the image prompt (that causes drift).
+        from app.services.banana import acompose_avatar_from_refs
+        from app.services.fit_pipeline import BANANA_AVATAR_PROMPT
+        avatar_prompt = BANANA_AVATAR_PROMPT
+        log.info("[tryon] avatar: calling nano banana 2")
+        images = await acompose_avatar_from_refs(
+            references=ref_tuples,
+            prompt=avatar_prompt,
         )
-        log.info("[tryon] avatar: calling gpt-image-1 text-to-image")
-        images = await agenerate_image(
-            avatar_prompt,
-            size="1024x1536",
-            quality="high",
-            model="openai/gpt-image-1",
-        )
-        log.info("[tryon] avatar: gpt-image-1 returned %d image(s)", len(images))
+        log.info("[tryon] avatar: banana 2 returned %d image(s)", len(images))
         if not images:
-            raise RuntimeError("gpt-image-1 returned no avatar image")
+            raise RuntimeError("nano banana 2 returned no avatar image")
         stored = await upload_avatar(images[0], user_id=user_id)
     except RuntimeError as exc:
         log.exception("[tryon] avatar generation failed")

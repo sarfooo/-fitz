@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     dedalus_api_key: str = ""
+    google_api_key: str = ""
 
     supabase_url: str = ""
     supabase_service_role_key: str = ""

@@ -15,6 +15,7 @@ interface TopBarProps {
   avatarUrl?: string | null;
   active?: TopBarView;
   onNavigate?: (view: TopBarView) => void;
+  onUpdateAvatar?: () => void;
 }
 
 const NAV_ITEMS: Array<{ id: TopBarView; label: string }> = [
@@ -31,6 +32,7 @@ export function TopBar({
   avatarUrl,
   active = "home",
   onNavigate,
+  onUpdateAvatar,
 }: TopBarProps) {
   const primaryLabel = displayName?.trim() || username;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -142,7 +144,20 @@ export function TopBar({
         </button>
 
         {menuOpen ? (
-          <div className="absolute right-0 top-[calc(100%+10px)] z-30 min-w-[140px] border border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(18,10,26,0.98)_0%,rgba(7,3,12,0.98)_100%)] p-2 shadow-[0_18px_40px_rgba(0,0,0,0.45)]">
+          <div className="absolute right-0 top-[calc(100%+10px)] z-30 min-w-[160px] border border-[color:var(--color-fc-border)] bg-[linear-gradient(180deg,rgba(18,10,26,0.98)_0%,rgba(7,3,12,0.98)_100%)] p-2 shadow-[0_18px_40px_rgba(0,0,0,0.45)]">
+            {onUpdateAvatar ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onUpdateAvatar();
+                }}
+                className="w-full px-3 py-2 text-left text-[14px] uppercase text-white/85 hover:bg-white/5"
+                style={{ fontFamily: "var(--font-pixel)" }}
+              >
+                Update avatar
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => void handleLogout()}

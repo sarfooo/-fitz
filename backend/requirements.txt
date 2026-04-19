@@ -18,6 +18,7 @@ typing-extensions>=4.12.0
 
 # ---- AI / Image generation ----
 dedalus-labs>=0.1.0
+google-genai>=1.73.0
 Pillow>=11.0.0
 opencv-python-headless>=4.10.0
 numpy>=2.0.0

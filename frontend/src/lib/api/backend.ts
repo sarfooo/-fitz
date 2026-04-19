@@ -233,12 +233,26 @@ export interface FitStartResponse {
   status: RenderStatus;
 }
 
+export interface RenderAngle {
+  angle: string;
+  image_url: string | null;
+  storage_path: string | null;
+  bucket: string | null;
+}
+
 export interface FitStatusResponse {
   render_id: string;
   status: RenderStatus;
   image: GeneratedImage | null;
+  angles: RenderAngle[];
   error: string | null;
   credits_remaining: number | null;
+}
+
+export interface GenerateAnglesResponse {
+  success: boolean;
+  angles: RenderAngle[];
+  error: string | null;
 }
 
 export async function generateFit(
@@ -265,6 +279,15 @@ export async function getRenderStatus(accessToken: string, renderId: string) {
     cache: "no-store",
   });
   return parseJson<FitStatusResponse>(response);
+}
+
+export async function generateMoreAngles(accessToken: string, renderId: string) {
+  const baseUrl = getBackendBaseUrl();
+  const response = await fetch(`${baseUrl}/tryon/render/${renderId}/angles`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return parseJson<GenerateAnglesResponse>(response);
 }
 
 export interface LookbookFit {

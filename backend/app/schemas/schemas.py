@@ -261,12 +261,26 @@ class FitStartResponse(BaseModel):
     status: RenderStatus = "pending"
 
 
+class RenderAngleOut(BaseModel):
+    angle: str
+    image_url: str | None = None
+    storage_path: str | None = None
+    bucket: str | None = None
+
+
 class FitStatusResponse(BaseModel):
     render_id: str
     status: RenderStatus
     image: GeneratedImageOut | None = None
+    angles: list[RenderAngleOut] = Field(default_factory=list)
     error: str | None = None
     credits_remaining: int | None = None
+
+
+class GenerateAnglesResponse(BaseModel):
+    success: bool
+    angles: list[RenderAngleOut] = Field(default_factory=list)
+    error: str | None = None
 
 
 class LookbookFit(BaseModel):

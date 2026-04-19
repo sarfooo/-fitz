@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link2, Sparkles } from "lucide-react";
 
 import type { MarketplaceItem } from "@/components/dashboard/MarketplacePanel";
+import { ScrollReel } from "@/components/ui/ScrollReel";
 import { addClosetItem, fetchBrowseItems } from "@/lib/api/backend";
 
 interface SuggestionsPanelProps {
@@ -186,13 +187,6 @@ export function SuggestionsPanel({
             Based on pieces you viewed, wore, or checked out
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded border border-[#6f5dd9]/50 bg-[#120a1a] px-3 py-2">
-          <div className="flex items-center gap-1">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#6f5dd9]" />
-            <span className="h-2.5 w-2.5 rounded-full bg-[#9a6dff]" />
-          </div>
-          <p className="text-[12px] uppercase tracking-[0.12em] text-white/80">Powered by KNOT</p>
-        </div>
       </div>
 
       {keywordTerms.length > 0 ? (
@@ -249,13 +243,17 @@ export function SuggestionsPanel({
         <span>{loading ? "Loading..." : `${visibleResults.length} items`}</span>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-y-auto pr-1 lg:grid-cols-3 xl:grid-cols-4">
+      <ScrollReel
+        className="min-h-0 flex-1"
+        trackClassName="gap-3 pr-1"
+        ariaLabel="suggested items"
+      >
         {visibleResults.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={(event) => handleItemClick(event, item)}
-            className={`group rounded border bg-black/20 p-2 text-left transition ${
+            className={`group flex-shrink-0 w-[200px] snap-start rounded border bg-black/20 p-2 text-left transition ${
               selectedIdSet.has(item.id)
                 ? "border-[color:var(--color-fc-hot)] shadow-[0_0_0_1px_rgba(255,38,185,0.28)]"
                 : "border-[color:var(--color-fc-border)] hover:border-[color:var(--color-fc-hot)]"
@@ -303,7 +301,7 @@ export function SuggestionsPanel({
             </div>
           </button>
         ))}
-      </div>
+      </ScrollReel>
     </section>
   );
 }

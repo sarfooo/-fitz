@@ -282,6 +282,7 @@ export function DashboardShell({ user, accessToken = null }: DashboardShellProps
         avatarUrl={canvasAvatarUrl}
         active={activeView}
         onNavigate={setActiveView}
+        onUpdateAvatar={handleOpenSetup}
       />
 
       {activeView === "home" ? (
