@@ -49,10 +49,8 @@ from app.services.tryon import (
     build_avatar_prompt,
     build_outfit_prompt,
     build_tryon_prompt,
-    credits_remaining,
     insert_avatar,
     insert_render,
-    spend_tryon_credits,
     upload_avatar,
 )
 
@@ -61,14 +59,6 @@ log = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/tryon", tags=["tryon"])
-
-
-def ensure_credit_spend(user_id: str, amount: int, description: str):
-    result = spend_tryon_credits(user_id, amount, description)
-    if result is False:
-        raise HTTPException(status_code=400, detail="Not enough credits")
-    if result is None:
-        raise HTTPException(status_code=500, detail="Failed to update credits")
 
 
 @router.post("/avatar", response_model=AvatarResponse)
@@ -129,7 +119,6 @@ async def generate_tryon(
         fit_preference=req.fit_preference,
         layering_notes=req.layering_notes,
     )
-    ensure_credit_spend(user_id, 1, f"Try-on render for {req.item_description}")
     try:
         images = await agenerate_image(
             prompt,
@@ -164,7 +153,6 @@ async def generate_tryon(
             signed_url=stored.signed_url,
         ),
         prompt_used=prompt,
-        credits_remaining=credits_remaining(user_id),
     )
 
 
@@ -200,7 +188,6 @@ async def edit_tryon(
         if mask_bytes
         else None
     )
-    ensure_credit_spend(user_id, 1, f"Edited try-on render for {item_description}")
     try:
         images = await aedit_image(
             image=image_tuple,
@@ -235,7 +222,6 @@ async def edit_tryon(
             signed_url=stored.signed_url,
         ),
         prompt_used=prompt,
-        credits_remaining=credits_remaining(user_id),
     )
 
 
@@ -272,7 +258,6 @@ async def outfit_tryon(
         size_label=size_label,
         layering_notes=layering_notes,
     )
-    ensure_credit_spend(user_id, 5, "Outfit render bundle")
     try:
         images = await acompose_outfit(
             avatar=(avatar_bytes, avatar_mime),
@@ -307,7 +292,6 @@ async def outfit_tryon(
             signed_url=stored.signed_url,
         ),
         prompt_used=prompt,
-        credits_remaining=credits_remaining(user_id),
     )
 
 
@@ -411,11 +395,7 @@ async def _run_fit_job(
             update_render_status(render_id, "failed")
         except Exception:
             log.exception("[tryon] also failed to mark render %s failed", render_id)
-        try:
-            from app.services.credits import add_credits
-            add_credits(user_id, 1, f"Refund for failed render {render_id}: {exc}")
-        except Exception:
-            log.exception("[tryon] failed to refund render %s", render_id)
+        # Credit refunds are no longer relevant now that rendering is ungated.
 
 
 @router.post("/fit", response_model=FitStartResponse)
@@ -445,8 +425,6 @@ async def generate_fit(
             status_code=400,
             detail="Your avatar has no identity description — re-run avatar setup.",
         )
-
-    ensure_credit_spend(user_id, 1, "Try-on fit render")
 
     row = insert_render(
         user_id=user_id,
@@ -510,14 +488,13 @@ def get_render_status(
 
     error_msg = None
     if status == "failed":
-        error_msg = "Render failed — credit refunded. Try again."
+        error_msg = "Render failed. Try again."
 
     return FitStatusResponse(
         render_id=render_id,
         status=status if status in {"pending", "ready", "failed"} else "pending",
         image=image_out,
         error=error_msg,
-        credits_remaining=credits_remaining(user_id),
     )
 
 
